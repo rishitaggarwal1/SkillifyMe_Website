@@ -1,21 +1,29 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { 
-  LayoutDashboard, 
-  Briefcase, 
-  Users, 
-  GraduationCap, 
+import {
+  LayoutDashboard,
+  Briefcase,
+  Users,
+  GraduationCap,
   CreditCard,
+  Image,
+  BookOpen,
+  MessageSquare,
+  Star,
   LogOut
 } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 
 const navItems = [
   { name: 'Dashboard', path: '/admin', icon: LayoutDashboard },
+  { name: 'Trainings', path: '/admin/trainings', icon: BookOpen },
   { name: 'Internships', path: '/admin/internships', icon: Briefcase },
   { name: 'Applications', path: '/admin/applications', icon: GraduationCap },
   { name: 'Students', path: '/admin/students', icon: Users },
   { name: 'Payments', path: '/admin/payments', icon: CreditCard },
+  { name: 'Gallery', path: '/admin/gallery', icon: Image },
+  { name: 'Reviews', path: '/admin/reviews', icon: Star },
+  { name: 'Contacts', path: '/admin/contacts', icon: MessageSquare },
 ];
 
 export default function Sidebar() {

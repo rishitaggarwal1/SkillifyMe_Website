@@ -6,6 +6,7 @@ import Trainings from './pages/Trainings';
 import Internship from './pages/Internship';
 import Contact from './pages/Contact';
 import Apply from './pages/Apply';
+import Gallery from './pages/Gallery';
 
 // Admin imports
 import AdminLayout from './components/admin/AdminLayout';
@@ -16,6 +17,11 @@ import InternshipsAdmin from './pages/admin/Internships';
 import ApplicationsAdmin from './pages/admin/Applications';
 import StudentsAdmin from './pages/admin/Students';
 import PaymentsAdmin from './pages/admin/Payments';
+import GalleryAdmin from './pages/admin/GalleryAdmin';
+import TrainingsAdmin from './pages/admin/TrainingsAdmin';
+import ContactsAdmin from './pages/admin/ContactsAdmin';
+import ReviewsAdmin from './pages/admin/ReviewsAdmin';
+import Reviews from './pages/Reviews';
 
 function App() {
   return (
@@ -37,6 +43,10 @@ function App() {
           <Route path="applications" element={<ApplicationsAdmin />} />
           <Route path="students" element={<StudentsAdmin />} />
           <Route path="payments" element={<PaymentsAdmin />} />
+          <Route path="gallery" element={<GalleryAdmin />} />
+          <Route path="trainings" element={<TrainingsAdmin />} />
+          <Route path="contacts" element={<ContactsAdmin />} />
+          <Route path="reviews" element={<ReviewsAdmin />} />
         </Route>
 
         {/* Public Routes */}
@@ -52,6 +62,8 @@ function App() {
                   <Route path="/internship" element={<Internship />} />
                   <Route path="/contact" element={<Contact />} />
                   <Route path="/apply" element={<Apply />} />
+                  <Route path="/gallery" element={<Gallery />} />
+                  <Route path="/reviews" element={<Reviews />} />
                 </Routes>
               </main>
               <Footer />
