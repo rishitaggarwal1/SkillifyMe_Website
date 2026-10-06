@@ -7,6 +7,7 @@ import Internship from './pages/Internship';
 import Contact from './pages/Contact';
 import Apply from './pages/Apply';
 import Gallery from './pages/Gallery';
+import InstitutionTraining from './pages/InstitutionTraining';
 
 // Admin imports
 import AdminLayout from './components/admin/AdminLayout';
@@ -59,6 +60,7 @@ function App() {
                 <Routes>
                   <Route path="/" element={<Home />} />
                   <Route path="/trainings" element={<Trainings />} />
+                  <Route path="/institution-training" element={<InstitutionTraining />} />
                   <Route path="/internship" element={<Internship />} />
                   <Route path="/contact" element={<Contact />} />
                   <Route path="/apply" element={<Apply />} />

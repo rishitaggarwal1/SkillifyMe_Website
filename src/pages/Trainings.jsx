@@ -178,11 +178,10 @@ const Trainings = () => {
               <button
                 key={cat}
                 onClick={() => setActiveCategory(cat)}
-                className={`flex-shrink-0 px-4 py-1.5 rounded-full text-sm font-semibold transition-all duration-200 ${
-                  activeCategory === cat
+                className={`flex-shrink-0 px-4 py-1.5 rounded-full text-sm font-semibold transition-all duration-200 ${activeCategory === cat
                     ? 'bg-blue-600 text-white shadow-md shadow-blue-600/20'
                     : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                }`}
+                  }`}
               >
                 {cat}
               </button>
@@ -217,7 +216,7 @@ const Trainings = () => {
             <Loader />
           ) : error ? (
             <div className="text-center p-8 bg-red-50 text-red-500 rounded-2xl max-w-md mx-auto border border-red-100">
-              Failed to load courses. Please check your Supabase configuration.
+              Failed to load courses.
             </div>
           ) : filtered.length === 0 ? (
             <motion.div
