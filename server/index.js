@@ -61,7 +61,12 @@ async function getColumns(table) {
 }
 
 async function assertColumns(table, keys) {
-  const columns = await getColumns(table);
+  let columns = await getColumns(table);
+  // A column may have been added since the list was cached (e.g. after running init-db), so re-check once
+  if (keys.some(k => !columns.has(k))) {
+    delete columnCache[table];
+    columns = await getColumns(table);
+  }
   const bad = keys.find(k => !columns.has(k));
   if (bad) {
     const err = new Error(`Unknown column "${bad}" on ${table}`);

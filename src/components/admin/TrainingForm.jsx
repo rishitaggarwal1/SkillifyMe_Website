@@ -1,9 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { X, Upload, Loader2, Plus, Minus } from 'lucide-react';
+import { X, Upload, Loader2, Plus, Minus, ChevronUp, ChevronDown, Trash2 } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 
 const CATEGORIES = ['Web Dev', 'AI / ML', 'Programming', 'Cloud', 'Data Science', 'DevOps'];
 const LEVELS = ['Beginner', 'Intermediate', 'Advanced'];
+
+// In the form each module keeps its lessons as text (one per line); saved as { title, lessons: [] }
+const emptyModule = () => ({ title: '', lessonsText: '' });
 
 const DEFAULT_FORM = {
   title: '',
@@ -18,6 +21,7 @@ const DEFAULT_FORM = {
   rating: '',
   students_count: '',
   topics: [''],
+  curriculum: [],
   is_bestseller: false,
   language: 'English',
 };
@@ -35,6 +39,10 @@ export default function TrainingForm({ initialData, onSubmit, onClose }) {
         ...DEFAULT_FORM,
         ...initialData,
         topics: initialData.topics?.length > 0 ? initialData.topics : [''],
+        curriculum: (initialData.curriculum || []).map((m) => ({
+          title: m.title || '',
+          lessonsText: (m.lessons || []).join('\n'),
+        })),
         is_bestseller: initialData.is_bestseller ?? false,
       });
       setPreview(initialData.image_url || '');
@@ -55,6 +63,20 @@ export default function TrainingForm({ initialData, onSubmit, onClose }) {
   const addTopic = () => setFormData({ ...formData, topics: [...formData.topics, ''] });
   const removeTopic = (idx) =>
     setFormData({ ...formData, topics: formData.topics.filter((_, i) => i !== idx) });
+
+  // — Curriculum modules —
+  const setCurriculum = (curriculum) => setFormData({ ...formData, curriculum });
+  const updateModule = (idx, field, value) =>
+    setCurriculum(formData.curriculum.map((m, i) => (i === idx ? { ...m, [field]: value } : m)));
+  const addModule = () => setCurriculum([...formData.curriculum, emptyModule()]);
+  const removeModule = (idx) => setCurriculum(formData.curriculum.filter((_, i) => i !== idx));
+  const moveModule = (idx, dir) => {
+    const target = idx + dir;
+    if (target < 0 || target >= formData.curriculum.length) return;
+    const list = [...formData.curriculum];
+    [list[idx], list[target]] = [list[target], list[idx]];
+    setCurriculum(list);
+  };
 
   const handleImageFile = (e) => {
     const file = e.target.files[0];
@@ -80,8 +102,16 @@ export default function TrainingForm({ initialData, onSubmit, onClose }) {
       let imageUrl = formData.image_url;
       if (imageFile) imageUrl = await uploadImage(imageFile);
 
+      const curriculum = formData.curriculum
+        .map((m) => ({
+          title: m.title.trim(),
+          lessons: m.lessonsText.split('\n').map((l) => l.trim()).filter(Boolean),
+        }))
+        .filter((m) => m.title || m.lessons.length > 0);
+
       await onSubmit({
         ...formData,
+        curriculum,
         image_url: imageUrl,
         price: formData.price ? Number(formData.price) : null,
         original_price: formData.original_price ? Number(formData.original_price) : null,
@@ -217,6 +247,64 @@ export default function TrainingForm({ initialData, onSubmit, onClose }) {
             <button type="button" onClick={addTopic}
               className="mt-2 flex items-center gap-1.5 text-sm text-blue-600 font-medium hover:text-blue-700">
               <Plus className="w-4 h-4" /> Add Topic
+            </button>
+          </div>
+
+          {/* Curriculum */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className={labelCls + ' mb-0'}>Curriculum</label>
+              {formData.curriculum.length > 0 && (
+                <span className="text-xs text-slate-400">
+                  {formData.curriculum.length} module{formData.curriculum.length === 1 ? '' : 's'}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-slate-500 mb-3">
+              Shown to students on the checkout page. Add a module, then list its lessons one per line.
+            </p>
+
+            <div className="space-y-3">
+              {formData.curriculum.map((mod, idx) => (
+                <div key={idx} className="border border-slate-200 rounded-xl p-3 bg-slate-50/60">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="w-7 h-7 shrink-0 rounded-lg bg-blue-600 text-white text-xs font-bold flex items-center justify-center">
+                      {idx + 1}
+                    </span>
+                    <input
+                      type="text"
+                      value={mod.title}
+                      onChange={(e) => updateModule(idx, 'title', e.target.value)}
+                      placeholder={`Module ${idx + 1} title, e.g. HTML & CSS Fundamentals`}
+                      className={inputCls + ' flex-1 bg-white'}
+                    />
+                    <button type="button" onClick={() => moveModule(idx, -1)} disabled={idx === 0}
+                      className="p-1.5 text-slate-500 hover:bg-white rounded-lg disabled:opacity-30" title="Move up">
+                      <ChevronUp className="w-4 h-4" />
+                    </button>
+                    <button type="button" onClick={() => moveModule(idx, 1)} disabled={idx === formData.curriculum.length - 1}
+                      className="p-1.5 text-slate-500 hover:bg-white rounded-lg disabled:opacity-30" title="Move down">
+                      <ChevronDown className="w-4 h-4" />
+                    </button>
+                    <button type="button" onClick={() => removeModule(idx)}
+                      className="p-1.5 text-red-500 hover:bg-red-50 rounded-lg" title="Remove module">
+                      <Trash2 className="w-4 h-4" />
+                    </button>
+                  </div>
+                  <textarea
+                    rows={3}
+                    value={mod.lessonsText}
+                    onChange={(e) => updateModule(idx, 'lessonsText', e.target.value)}
+                    placeholder={'One lesson per line, e.g.\nIntroduction to HTML\nCSS Flexbox & Grid'}
+                    className={inputCls + ' bg-white resize-y'}
+                  />
+                </div>
+              ))}
+            </div>
+
+            <button type="button" onClick={addModule}
+              className="mt-2 flex items-center gap-1.5 text-sm text-blue-600 font-medium hover:text-blue-700">
+              <Plus className="w-4 h-4" /> Add Module
             </button>
           </div>
 

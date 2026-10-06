@@ -5,7 +5,9 @@ import { supabase, API_URL } from '../lib/supabaseClient';
 import { loadRazorpay } from '../lib/razorpay';
 import { Loader2, UploadCloud, CheckCircle, AlertCircle } from 'lucide-react';
 
-export default function ApplicationForm() {
+// onProgramChange(course, programType) tells the page which course (or null) and type are selected,
+// so it can show the course curriculum
+export default function ApplicationForm({ onProgramChange }) {
   const [searchParams] = useSearchParams();
   const initialCourseId = searchParams.get('course');
   const [programType, setProgramType] = useState(initialCourseId ? 'course' : 'internship');
@@ -30,10 +32,14 @@ export default function ApplicationForm() {
   const selectedProgram = programs.find(p => p.id === selectedProgramId);
 
   useEffect(() => {
+    onProgramChange?.(isCourse ? selectedProgram || null : null, programType);
+  }, [isCourse, selectedProgram, programType, onProgramChange]);
+
+  useEffect(() => {
     const fetchPrograms = async () => {
       const [internshipsRes, coursesRes] = await Promise.all([
         supabase.from('internships').select('id, title, price, original_price'),
-        supabase.from('courses').select('id, title, price, original_price').order('created_at', { ascending: false }),
+        supabase.from('courses').select('*').order('created_at', { ascending: false }),
       ]);
       if (!internshipsRes.error && internshipsRes.data) setInternships(internshipsRes.data);
       if (!coursesRes.error && coursesRes.data) {

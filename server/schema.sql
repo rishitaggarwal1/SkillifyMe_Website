@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS courses (
   students_count INTEGER DEFAULT 0,
   level TEXT DEFAULT 'Beginner',
   topics JSONB DEFAULT '[]'::jsonb,
+  -- [{ "title": "Module 1: Basics", "lessons": ["Lesson A", "Lesson B"] }, ...]
+  curriculum JSONB DEFAULT '[]'::jsonb,
   instructor TEXT DEFAULT 'SkillifyMe Team',
   is_bestseller BOOLEAN DEFAULT false,
   language TEXT DEFAULT 'English',
@@ -144,6 +146,7 @@ ALTER TABLE payments ADD COLUMN IF NOT EXISTS course_id UUID REFERENCES courses(
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS application_id UUID REFERENCES applications(id) ON DELETE SET NULL;
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS order_id TEXT UNIQUE;
 ALTER TABLE internships ADD COLUMN IF NOT EXISTS problem_statement_url TEXT;
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS curriculum JSONB DEFAULT '[]'::jsonb;
 
 -- Seed contact_info
 INSERT INTO contact_info (email, phone, address, city, country, working_hours)

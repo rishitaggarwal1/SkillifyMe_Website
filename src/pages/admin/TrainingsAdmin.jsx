@@ -108,6 +108,18 @@ export default function TrainingsAdmin() {
         row.students_count ? (row.students_count).toLocaleString('en-IN') : '—',
     },
     {
+      header: 'Curriculum',
+      value: (row) => row.curriculum?.length || 0,
+      render: (row) =>
+        row.curriculum?.length ? (
+          <span className="text-slate-700">
+            {row.curriculum.length} module{row.curriculum.length === 1 ? '' : 's'}
+          </span>
+        ) : (
+          <span className="text-amber-600 text-xs font-medium">Not added</span>
+        ),
+    },
+    {
       header: 'Price',
       value: (row) => Number(row.price || 0),
       render: (row) => `₹${Number(row.price || 0).toLocaleString('en-IN')}`,
