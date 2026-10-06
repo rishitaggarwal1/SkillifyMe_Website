@@ -1,9 +1,13 @@
 import React from 'react';
+import { useSearchParams } from 'react-router-dom';
 import ApplicationForm from '../components/ApplicationForm';
 import { motion } from 'framer-motion';
 import { Sparkles, CheckCircle2, ShieldCheck } from 'lucide-react';
 
 export default function Apply() {
+  const [searchParams] = useSearchParams();
+  const isCourse = !!searchParams.get('course');
+
   return (
     <div className="min-h-screen bg-slate-50 py-12 px-4 sm:px-6 lg:px-8">
       <div className="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-12">
@@ -20,7 +24,7 @@ export default function Apply() {
           </div>
           
           <h1 className="text-4xl sm:text-5xl font-extrabold text-slate-900 tracking-tight mb-6">
-            Apply for your <span className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">Dream Internship</span>
+            {isCourse ? 'Enroll in your ' : 'Apply for your '}<span className="bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">{isCourse ? 'Next Course' : 'Dream Internship'}</span>
           </h1>
           
           <p className="text-lg text-slate-600 mb-8 leading-relaxed">

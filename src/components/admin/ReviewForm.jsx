@@ -84,7 +84,7 @@ export default function ReviewForm({ initialData, onSubmit, onClose }) {
     try {
       let avatarUrl = form.reviewer_avatar;
       if (avatarFile) avatarUrl = await uploadAvatar(avatarFile);
-      onSubmit({ ...form, reviewer_avatar: avatarUrl });
+      await onSubmit({ ...form, reviewer_avatar: avatarUrl });
     } catch {
       setUploadError('Avatar upload failed. Try again or use a URL.');
       setUploading(false);

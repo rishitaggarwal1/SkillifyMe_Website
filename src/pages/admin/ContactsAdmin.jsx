@@ -1,12 +1,22 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
-import DataTable from '../../components/admin/DataTable';
-import { Trash2, Save, Loader2, MessageSquare, Settings } from 'lucide-react';
+import DataTable, { FilterPills } from '../../components/admin/DataTable';
+import { useToast } from '../../components/admin/Toast';
+import { Trash2, Save, Loader2, MessageSquare, Settings, X, Reply, Building2 } from 'lucide-react';
 
 const TABS = [
   { id: 'messages', label: 'Messages', icon: MessageSquare },
   { id: 'details', label: 'Edit Contact Details', icon: Settings },
 ];
+
+// Enquiries from the "For Institutions" page are saved with this prefix
+const INSTITUTION_PREFIX = '[Institution enquiry]';
+const isInstitution = (msg) => msg.message?.startsWith(INSTITUTION_PREFIX);
+const messageBody = (msg) =>
+  isInstitution(msg) ? msg.message.slice(INSTITUTION_PREFIX.length).trim() : msg.message;
+
+const formatDateTime = (d) =>
+  new Date(d).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: 'numeric', minute: '2-digit' });
 
 const DEFAULT_INFO = {
   email: '',
@@ -22,7 +32,10 @@ const DEFAULT_INFO = {
 };
 
 export default function ContactsAdmin() {
+  const toast = useToast();
   const [activeTab, setActiveTab] = useState('messages');
+  const [typeFilter, setTypeFilter] = useState('all');
+  const [openMessage, setOpenMessage] = useState(null);
 
   // — Messages state —
   const [messages, setMessages] = useState([]);
@@ -46,7 +59,7 @@ export default function ContactsAdmin() {
       .from('contacts')
       .select('*')
       .order('created_at', { ascending: false });
-    if (error) console.error('Error fetching messages:', error);
+    if (error) toast.error(`Could not load messages: ${error.message}`);
     else setMessages(data);
     setLoadingMsgs(false);
   };
@@ -64,8 +77,13 @@ export default function ContactsAdmin() {
   const handleDeleteMessage = async (id) => {
     if (!window.confirm('Delete this message?')) return;
     const { error } = await supabase.from('contacts').delete().eq('id', id);
-    if (error) console.error('Error deleting:', error);
-    else fetchMessages();
+    if (error) {
+      toast.error(`Could not delete: ${error.message}`);
+      return;
+    }
+    toast.success('Message deleted');
+    setOpenMessage(null);
+    fetchMessages();
   };
 
   const handleInfoChange = (e) =>
@@ -85,29 +103,50 @@ export default function ContactsAdmin() {
         setInfoId(data.id);
       }
       setSaveStatus('success');
+      toast.success('Contact details saved');
       setTimeout(() => setSaveStatus('idle'), 3000);
     } catch (err) {
-      console.error('Error saving contact info:', err);
+      toast.error(`Could not save: ${err.message}`);
       setSaveStatus('error');
     } finally {
       setSaving(false);
     }
   };
 
+  const displayedMessages =
+    typeFilter === 'all'
+      ? messages
+      : messages.filter((m) => (typeFilter === 'institution' ? isInstitution(m) : !isInstitution(m)));
+
   // — Messages columns —
   const msgColumns = [
     { header: 'Name', accessor: 'name' },
     { header: 'Email', accessor: 'email' },
     {
+      header: 'Type',
+      value: (row) => (isInstitution(row) ? 'Institution' : 'General'),
+      render: (row) =>
+        isInstitution(row) ? (
+          <span className="inline-flex items-center gap-1 bg-purple-50 text-purple-700 text-xs font-semibold px-2.5 py-1 rounded-full">
+            <Building2 className="w-3 h-3" /> Institution
+          </span>
+        ) : (
+          <span className="inline-block bg-slate-100 text-slate-600 text-xs font-semibold px-2.5 py-1 rounded-full">General</span>
+        ),
+    },
+    {
       header: 'Message',
+      value: (row) => messageBody(row),
+      sortable: false,
       render: (row) => (
-        <span className="block max-w-xs truncate text-slate-600" title={row.message}>
-          {row.message}
+        <span className="block max-w-xs truncate text-slate-600">
+          {messageBody(row)}
         </span>
       ),
     },
     {
       header: 'Received',
+      value: (row) => row.created_at?.slice(0, 10),
       render: (row) =>
         new Date(row.created_at).toLocaleDateString('en-IN', {
           day: 'numeric', month: 'short', year: 'numeric',
@@ -165,9 +204,23 @@ export default function ContactsAdmin() {
             <div className="text-center py-10 text-slate-500">Loading messages…</div>
           ) : (
             <DataTable
-              data={messages}
+              data={displayedMessages}
               columns={msgColumns}
               renderActions={renderMsgActions}
+              onRowClick={setOpenMessage}
+              exportFileName="messages"
+              searchPlaceholder="Search messages…"
+              toolbar={
+                <FilterPills
+                  value={typeFilter}
+                  onChange={setTypeFilter}
+                  options={[
+                    { id: 'all', label: 'All', count: messages.length },
+                    { id: 'general', label: 'General', count: messages.filter((m) => !isInstitution(m)).length },
+                    { id: 'institution', label: 'Institutions', count: messages.filter(isInstitution).length },
+                  ]}
+                />
+              }
             />
           )}
         </div>
@@ -275,6 +328,39 @@ export default function ContactsAdmin() {
               </div>
             </form>
           )}
+        </div>
+      )}
+
+      {/* ── Full message ── */}
+      {openMessage && (
+        <div className="fixed inset-0 bg-slate-900/50 flex items-center justify-center z-50 p-4" onClick={() => setOpenMessage(null)}>
+          <div className="bg-white rounded-2xl w-full max-w-lg max-h-[85vh] overflow-y-auto shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start justify-between gap-4 p-6 border-b border-slate-200">
+              <div className="min-w-0">
+                <h3 className="text-lg font-bold text-slate-800 truncate">{openMessage.name}</h3>
+                <p className="text-sm text-slate-500 truncate">{openMessage.email}</p>
+                <p className="text-xs text-slate-400 mt-1">{formatDateTime(openMessage.created_at)}</p>
+              </div>
+              <button onClick={() => setOpenMessage(null)} className="text-slate-400 hover:text-slate-600" title="Close">
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            <p className="p-6 text-sm text-slate-700 whitespace-pre-wrap leading-relaxed">{messageBody(openMessage)}</p>
+            <div className="flex justify-between gap-3 p-6 pt-0">
+              <button
+                onClick={() => handleDeleteMessage(openMessage.id)}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100 transition-colors"
+              >
+                <Trash2 className="w-4 h-4" /> Delete
+              </button>
+              <a
+                href={`mailto:${openMessage.email}?subject=${encodeURIComponent('Re: your message to SkillifyMe')}`}
+                className="flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                <Reply className="w-4 h-4" /> Reply by email
+              </a>
+            </div>
+          </div>
         </div>
       )}
     </div>

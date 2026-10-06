@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import DataTable from '../../components/admin/DataTable';
+import { useToast } from '../../components/admin/Toast';
 import InternshipForm from '../../components/admin/InternshipForm';
 import { Plus, Edit2, Trash2 } from 'lucide-react';
 
 export default function InternshipsAdmin() {
+  const toast = useToast();
   const [internships, setInternships] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -21,35 +23,31 @@ export default function InternshipsAdmin() {
       .select('*')
       .order('created_at', { ascending: false });
 
-    if (error) console.error('Error fetching internships:', error);
+    if (error) toast.error(`Could not load data: ${error.message}`);
     else setInternships(data);
     setLoading(false);
   };
 
   const handleDelete = async (id) => {
     if (!window.confirm('Are you sure you want to delete this internship?')) return;
-    
     const { error } = await supabase.from('internships').delete().eq('id', id);
-    if (error) console.error('Error deleting internship:', error);
-    else fetchInternships();
+    if (error) {
+      toast.error(`Could not delete: ${error.message}`);
+      return;
+    }
+    toast.success('Internship deleted');
+    fetchInternships();
   };
 
   const handleSave = async (formData) => {
-    if (currentInternship) {
-      // Update
-      const { error } = await supabase
-        .from('internships')
-        .update(formData)
-        .eq('id', currentInternship.id);
-      if (error) console.error('Error updating:', error);
-    } else {
-      // Insert
-      const { error } = await supabase
-        .from('internships')
-        .insert([formData]);
-      if (error) console.error('Error inserting:', error);
+    const { error } = currentInternship
+      ? await supabase.from('internships').update(formData).eq('id', currentInternship.id)
+      : await supabase.from('internships').insert([formData]);
+    if (error) {
+      toast.error(`Could not save: ${error.message}`);
+      return; // keep the form open so nothing typed is lost
     }
-    
+    toast.success(currentInternship ? 'Internship updated' : 'Internship added');
     setIsModalOpen(false);
     fetchInternships();
   };
@@ -57,7 +55,7 @@ export default function InternshipsAdmin() {
   const columns = [
     { header: 'Title', accessor: 'title' },
     { header: 'Duration', accessor: 'duration' },
-    { header: 'Price', render: (row) => `₹${row.price || 0}` },
+    { header: 'Price', value: (row) => Number(row.price || 0), render: (row) => `₹${row.price || 0}` },
   ];
 
   const renderActions = (row) => (
@@ -106,6 +104,8 @@ export default function InternshipsAdmin() {
           data={internships}
           columns={columns}
           renderActions={renderActions}
+          exportFileName="internships"
+          searchPlaceholder="Search internships…"
         />
       )}
 

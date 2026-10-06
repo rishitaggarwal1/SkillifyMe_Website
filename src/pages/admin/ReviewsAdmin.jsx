@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import DataTable from '../../components/admin/DataTable';
+import { useToast } from '../../components/admin/Toast';
 import ReviewForm from '../../components/admin/ReviewForm';
 import { Plus, Edit2, Trash2, Star, Quote, Video } from 'lucide-react';
 
 export default function ReviewsAdmin() {
+  const toast = useToast();
   const [reviews, setReviews] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -22,7 +24,7 @@ export default function ReviewsAdmin() {
       .select('*')
       .order('is_featured', { ascending: false })
       .order('created_at', { ascending: false });
-    if (error) console.error('Error fetching reviews:', error);
+    if (error) toast.error(`Could not load data: ${error.message}`);
     else setReviews(data);
     setLoading(false);
   };
@@ -30,18 +32,23 @@ export default function ReviewsAdmin() {
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this review?')) return;
     const { error } = await supabase.from('reviews').delete().eq('id', id);
-    if (error) console.error('Error deleting:', error);
-    else fetchReviews();
+    if (error) {
+      toast.error(`Could not delete: ${error.message}`);
+      return;
+    }
+    toast.success('Review deleted');
+    fetchReviews();
   };
 
   const handleSave = async (formData) => {
-    if (current) {
-      const { error } = await supabase.from('reviews').update(formData).eq('id', current.id);
-      if (error) console.error('Error updating:', error);
-    } else {
-      const { error } = await supabase.from('reviews').insert([formData]);
-      if (error) console.error('Error inserting:', error);
+    const { error } = current
+      ? await supabase.from('reviews').update(formData).eq('id', current.id)
+      : await supabase.from('reviews').insert([formData]);
+    if (error) {
+      toast.error(`Could not save: ${error.message}`);
+      return; // keep the form open so nothing typed is lost
     }
+    toast.success(current ? 'Review updated' : 'Review added');
     setIsModalOpen(false);
     fetchReviews();
   };
@@ -51,6 +58,7 @@ export default function ReviewsAdmin() {
   const columns = [
     {
       header: 'Reviewer',
+      value: (row) => row.reviewer_name,
       render: (row) => (
         <div className="flex items-center gap-3">
           <img
@@ -72,6 +80,7 @@ export default function ReviewsAdmin() {
     },
     {
       header: 'Type',
+      value: (row) => row.type,
       render: (row) =>
         row.type === 'text' ? (
           <span className="inline-flex items-center gap-1.5 bg-blue-50 text-blue-700 text-xs font-semibold px-2.5 py-1 rounded-full">
@@ -85,6 +94,7 @@ export default function ReviewsAdmin() {
     },
     {
       header: 'Rating',
+      value: (row) => row.rating,
       render: (row) =>
         row.rating ? (
           <div className="flex items-center gap-1 text-amber-400">
@@ -95,6 +105,7 @@ export default function ReviewsAdmin() {
     },
     {
       header: 'Content',
+      value: (row) => row.type === 'text' ? row.review_text : (row.video_title || row.video_url),
       render: (row) =>
         row.type === 'text' ? (
           <span className="text-xs text-slate-500 block max-w-xs truncate" title={row.review_text}>
@@ -108,6 +119,7 @@ export default function ReviewsAdmin() {
     },
     {
       header: 'Featured',
+      value: (row) => row.is_featured ? 'Yes' : 'No',
       render: (row) =>
         row.is_featured ? (
           <span className="bg-amber-100 text-amber-700 text-xs font-bold px-2 py-0.5 rounded">
@@ -119,6 +131,7 @@ export default function ReviewsAdmin() {
     },
     {
       header: 'Added',
+      value: (row) => row.created_at?.slice(0, 10),
       render: (row) =>
         new Date(row.created_at).toLocaleDateString('en-IN', {
           day: 'numeric', month: 'short', year: 'numeric',
@@ -190,7 +203,13 @@ export default function ReviewsAdmin() {
       {loading ? (
         <div className="text-center py-10 text-slate-500">Loading reviews…</div>
       ) : (
-        <DataTable data={displayed} columns={columns} renderActions={renderActions} />
+        <DataTable
+          data={displayed}
+          columns={columns}
+          renderActions={renderActions}
+          exportFileName="reviews"
+          searchPlaceholder="Search reviews…"
+        />
       )}
 
       {isModalOpen && (

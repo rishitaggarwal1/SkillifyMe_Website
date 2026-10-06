@@ -80,7 +80,7 @@ export default function TrainingForm({ initialData, onSubmit, onClose }) {
       let imageUrl = formData.image_url;
       if (imageFile) imageUrl = await uploadImage(imageFile);
 
-      onSubmit({
+      await onSubmit({
         ...formData,
         image_url: imageUrl,
         price: formData.price ? Number(formData.price) : null,
@@ -105,7 +105,7 @@ export default function TrainingForm({ initialData, onSubmit, onClose }) {
         {/* Header */}
         <div className="flex items-center justify-between p-6 border-b border-slate-200 sticky top-0 bg-white z-10">
           <h2 className="text-xl font-bold text-slate-800">
-            {initialData ? 'Edit Training Program' : 'Add Training Program'}
+            {initialData ? 'Edit Course' : 'Add Course'}
           </h2>
           <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">
             <X className="w-6 h-6" />
@@ -263,7 +263,7 @@ export default function TrainingForm({ initialData, onSubmit, onClose }) {
             <button type="submit" disabled={uploading}
               className="flex items-center gap-2 px-5 py-2 text-sm font-medium text-white bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 rounded-lg shadow-sm transition-all disabled:opacity-75">
               {uploading && <Loader2 className="w-4 h-4 animate-spin" />}
-              {initialData ? 'Update' : 'Save'} Program
+              {initialData ? 'Update' : 'Save'} Course
             </button>
           </div>
         </form>

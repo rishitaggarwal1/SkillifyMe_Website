@@ -90,7 +90,7 @@ export default function InternshipForm({ initialData, onSubmit, onClose }) {
         problem_statement_url: problemStatementUrl,
       };
 
-      onSubmit(cleanData);
+      await onSubmit(cleanData);
     } catch (error) {
       console.error('Error uploading PDF:', error);
       setUploadError('Failed to upload the PDF. Please try again.');
