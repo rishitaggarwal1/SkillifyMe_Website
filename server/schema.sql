@@ -148,6 +148,22 @@ ALTER TABLE payments ADD COLUMN IF NOT EXISTS order_id TEXT UNIQUE;
 ALTER TABLE internships ADD COLUMN IF NOT EXISTS problem_statement_url TEXT;
 ALTER TABLE courses ADD COLUMN IF NOT EXISTS curriculum JSONB DEFAULT '[]'::jsonb;
 
+-- 12. Roll numbers for course enrollments, e.g. 26DEV000001 (year + course code + counter)
+-- Course code: 3 capital letters/digits, unique, used in the roll number
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS code TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS courses_code_key ON courses (code);
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS roll_number TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS applications_roll_number_key ON applications (roll_number);
+
+-- When the purchase receipt was emailed (NULL = not sent yet)
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS receipt_sent_at TIMESTAMP WITH TIME ZONE;
+
+-- One counter per year + course code (e.g. '26DEV'), incremented atomically
+CREATE TABLE IF NOT EXISTS roll_counters (
+  prefix TEXT PRIMARY KEY,
+  last_value INTEGER NOT NULL DEFAULT 0
+);
+
 -- Seed contact_info
 INSERT INTO contact_info (email, phone, address, city, country, working_hours)
 SELECT 'contact@skillifyme.co.in', '', '', '', 'India', 'Mon–Sat, 9 AM – 7 PM IST'
@@ -234,3 +250,28 @@ SELECT * FROM (VALUES
   true
 )) AS seed(type, reviewer_name, reviewer_role, reviewer_avatar, rating, review_text, is_featured)
 WHERE NOT EXISTS (SELECT 1 FROM reviews);
+
+-- Give courses without a code one from the first three letters of their title,
+-- trying other letters / digits if that code is already taken
+DO $$
+DECLARE
+  c RECORD;
+  letters TEXT;
+  candidate TEXT;
+  i INTEGER;
+BEGIN
+  FOR c IN SELECT id, title FROM courses WHERE code IS NULL ORDER BY created_at LOOP
+    letters := upper(regexp_replace(c.title, '[^A-Za-z0-9]', '', 'g')) || 'XXX';
+    candidate := substr(letters, 1, 3);
+    i := 4;
+    WHILE EXISTS (SELECT 1 FROM courses WHERE code = candidate) LOOP
+      IF i <= length(letters) THEN
+        candidate := substr(letters, 1, 2) || substr(letters, i, 1);
+      ELSE
+        candidate := substr(letters, 1, 2) || ((i - length(letters)) % 10)::text;
+      END IF;
+      i := i + 1;
+    END LOOP;
+    UPDATE courses SET code = candidate WHERE id = c.id;
+  END LOOP;
+END $$;

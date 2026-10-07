@@ -8,8 +8,12 @@ const LEVELS = ['Beginner', 'Intermediate', 'Advanced'];
 // In the form each module keeps its lessons as text (one per line); saved as { title, lessons: [] }
 const emptyModule = () => ({ title: '', lessonsText: '' });
 
+// Suggested course code: first three letters/digits of the title, e.g. "DevOps" -> "DEV"
+const suggestCode = (title) => title.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 3);
+
 const DEFAULT_FORM = {
   title: '',
+  code: '',
   category: 'Web Dev',
   description: '',
   price: '',
@@ -32,6 +36,7 @@ export default function TrainingForm({ initialData, onSubmit, onClose }) {
   const [preview, setPreview] = useState('');
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState('');
+  const [codeEdited, setCodeEdited] = useState(false);
 
   useEffect(() => {
     if (initialData) {
@@ -51,7 +56,11 @@ export default function TrainingForm({ initialData, onSubmit, onClose }) {
 
   const handle = (e) => {
     const { name, value, type, checked } = e.target;
-    setFormData({ ...formData, [name]: type === 'checkbox' ? checked : value });
+    const next = { ...formData, [name]: type === 'checkbox' ? checked : value };
+    // While adding a course, keep the code in step with the title until it is edited by hand
+    if (name === 'title' && !initialData && !codeEdited) next.code = suggestCode(value);
+    if (name === 'code') next.code = value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 3);
+    setFormData(next);
   };
 
   const handleTopic = (idx, val) => {
@@ -143,12 +152,25 @@ export default function TrainingForm({ initialData, onSubmit, onClose }) {
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-5">
-          {/* Title */}
-          <div>
-            <label className={labelCls}>Title *</label>
-            <input type="text" name="title" required value={formData.title} onChange={handle}
-              placeholder="e.g. Full Stack Web Development" className={inputCls} />
+          {/* Title + Code */}
+          <div className="grid grid-cols-[1fr_auto] gap-4">
+            <div>
+              <label className={labelCls}>Title *</label>
+              <input type="text" name="title" required value={formData.title} onChange={handle}
+                placeholder="e.g. Full Stack Web Development" className={inputCls} />
+            </div>
+            <div className="w-28">
+              <label className={labelCls}>Course code *</label>
+              <input type="text" name="code" required minLength={3} maxLength={3} pattern="[A-Z0-9]{3}"
+                value={formData.code || ''} onChange={(e) => { setCodeEdited(true); handle(e); }}
+                title="3 letters or digits, e.g. DEV" placeholder="DEV"
+                className={inputCls + ' font-mono uppercase tracking-widest text-center'} />
+            </div>
           </div>
+          <p className="text-xs text-slate-500 -mt-3">
+            The course code goes into each student's roll number, e.g. {String(new Date().getFullYear()).slice(2)}{formData.code || 'DEV'}000001.
+            {initialData && ' Changing it only affects students who enroll after the change.'}
+          </p>
 
           {/* Category + Level */}
           <div className="grid grid-cols-2 gap-4">

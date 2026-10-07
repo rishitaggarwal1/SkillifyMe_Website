@@ -80,6 +80,16 @@ export default function ApplicationsAdmin() {
       ),
     },
     { header: 'Type', value: (row) => programType(row), hidden: true },
+    {
+      header: 'Roll No.',
+      value: (row) => row.roll_number,
+      render: (row) =>
+        row.roll_number ? (
+          <span className="font-mono font-semibold text-slate-800">{row.roll_number}</span>
+        ) : (
+          <span className="text-slate-400">—</span>
+        ),
+    },
     { header: 'Status', value: (row) => row.status, render: (row) => <StatusBadge status={row.status} /> },
     { header: 'Payment', value: (row) => row.payment_status, render: (row) => <StatusBadge status={row.payment_status} /> },
     {
@@ -114,7 +124,10 @@ export default function ApplicationsAdmin() {
     <div className="space-y-6">
       <div>
         <h2 className="text-2xl font-bold text-slate-800">Applications</h2>
-        <p className="text-slate-500">Course enrollments and internship applications. Click a student's name for details.</p>
+        <p className="text-slate-500">
+          Course enrollments and internship applications. Roll numbers are issued when a course enrollment is paid.
+          Click a student's name for details.
+        </p>
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
@@ -149,7 +162,7 @@ export default function ApplicationsAdmin() {
           columns={columns}
           renderActions={renderActions}
           exportFileName="applications"
-          searchPlaceholder="Search by student or program…"
+          searchPlaceholder="Search by student, program or roll number…"
         />
       )}
 

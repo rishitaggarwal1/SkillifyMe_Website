@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { X, FileText, Mail, Phone, Loader2 } from 'lucide-react';
 import { supabase } from '../../lib/supabaseClient';
 import { StatusBadge } from './StatusBadge';
+import RollNumberCard from '../RollNumberCard';
 
 const formatDate = (d) =>
   d ? new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '—';
@@ -104,15 +105,22 @@ export default function StudentDetails({ student, onClose }) {
                 ) : (
                   <ul className="divide-y divide-slate-100 border border-slate-200 rounded-xl">
                     {applications.map((a) => (
-                      <li key={a.id} className="p-3 flex items-center justify-between gap-3 text-sm">
-                        <div className="min-w-0">
-                          <div className="font-medium text-slate-800 truncate">{programName(a)}</div>
-                          <div className="text-xs text-slate-500">{programType(a)} · {formatDate(a.created_at)}</div>
+                      <li key={a.id} className="p-3 text-sm">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="font-medium text-slate-800 truncate">{programName(a)}</div>
+                            <div className="text-xs text-slate-500">{programType(a)} · {formatDate(a.created_at)}</div>
+                          </div>
+                          <div className="flex gap-1.5 shrink-0">
+                            <StatusBadge status={a.status} />
+                            <StatusBadge status={a.payment_status} />
+                          </div>
                         </div>
-                        <div className="flex gap-1.5 shrink-0">
-                          <StatusBadge status={a.status} />
-                          <StatusBadge status={a.payment_status} />
-                        </div>
+                        {a.roll_number && (
+                          <div className="mt-3 pt-3 border-t border-slate-100">
+                            <RollNumberCard rollNumber={a.roll_number} compact />
+                          </div>
+                        )}
                       </li>
                     ))}
                   </ul>

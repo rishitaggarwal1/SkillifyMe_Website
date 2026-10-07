@@ -3,6 +3,7 @@ import { useForm } from 'react-hook-form';
 import { useSearchParams } from 'react-router-dom';
 import { supabase, API_URL } from '../lib/supabaseClient';
 import { loadRazorpay } from '../lib/razorpay';
+import RollNumberCard from './RollNumberCard';
 import { Loader2, UploadCloud, CheckCircle, AlertCircle } from 'lucide-react';
 
 // onProgramChange(course, programType) tells the page which course (or null) and type are selected,
@@ -15,6 +16,8 @@ export default function ApplicationForm({ onProgramChange }) {
   const [courses, setCourses] = useState([]);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState({ type: '', message: '' });
+  // Set after a successful course purchase: { rollNumber, title, email }
+  const [enrolled, setEnrolled] = useState(null);
   const [fileError, setFileError] = useState('');
 
   const {
@@ -42,16 +45,18 @@ export default function ApplicationForm({ onProgramChange }) {
         supabase.from('courses').select('*').order('created_at', { ascending: false }),
       ]);
       if (!internshipsRes.error && internshipsRes.data) setInternships(internshipsRes.data);
-      if (!coursesRes.error && coursesRes.data) {
-        setCourses(coursesRes.data);
-        // Preselect the course the user clicked "Enroll" on
-        if (initialCourseId && coursesRes.data.some(c => c.id === initialCourseId)) {
-          setValue('program_id', initialCourseId);
-        }
-      }
+      if (!coursesRes.error && coursesRes.data) setCourses(coursesRes.data);
     };
     fetchPrograms();
-  }, [initialCourseId, setValue]);
+  }, []);
+
+  // Preselect the course the user clicked "Enroll" on. This runs after the options are rendered,
+  // otherwise the dropdown would look empty even though the course is selected.
+  useEffect(() => {
+    if (initialCourseId && courses.some(c => c.id === initialCourseId)) {
+      setValue('program_id', initialCourseId);
+    }
+  }, [courses, initialCourseId, setValue]);
 
   const switchProgramType = (type) => {
     setProgramType(type);
@@ -119,7 +124,13 @@ export default function ApplicationForm({ onProgramChange }) {
         },
       });
 
+      const programTitle = selectedProgram?.title;
+
       if (checkout.free) {
+        if (checkout.roll_number) {
+          setEnrolled({ rollNumber: checkout.roll_number, title: programTitle, email: formData.email });
+          return;
+        }
         setStatus({ type: 'success', message: 'Enrollment successful! Welcome aboard.' });
         reset();
         return;
@@ -141,7 +152,11 @@ export default function ApplicationForm({ onProgramChange }) {
         handler: async function (response) {
           // 3. The server checks Razorpay's signature before marking the enrollment paid
           try {
-            await postCheckout('verify', response);
+            const verified = await postCheckout('verify', response);
+            if (verified.roll_number) {
+              setEnrolled({ rollNumber: verified.roll_number, title: programTitle, email: formData.email });
+              return;
+            }
             setStatus({ type: 'success', message: 'Enrollment and payment successful! Welcome aboard.' });
             reset();
           } catch (err) {
@@ -175,6 +190,45 @@ export default function ApplicationForm({ onProgramChange }) {
       setLoading(false);
     }
   };
+
+  const startOver = () => {
+    setEnrolled(null);
+    setStatus({ type: '', message: '' });
+    reset();
+  };
+
+  // Success screen after buying a course: shows the roll number
+  if (enrolled) {
+    return (
+      <div className="bg-white p-8 rounded-2xl shadow-xl border border-slate-100">
+        <div className="text-center mb-8">
+          <div className="w-14 h-14 mx-auto mb-4 bg-green-100 rounded-full flex items-center justify-center">
+            <CheckCircle className="w-8 h-8 text-green-600" />
+          </div>
+          <h2 className="text-2xl font-bold text-slate-800">You're enrolled!</h2>
+          {enrolled.title && <p className="text-slate-500 mt-1">Welcome to {enrolled.title}.</p>}
+        </div>
+
+        <RollNumberCard rollNumber={enrolled.rollNumber} />
+
+        <div className="mt-8 p-4 bg-blue-50 border border-blue-100 rounded-xl text-sm text-blue-900">
+          <p className="font-semibold mb-1">Keep your roll number safe</p>
+          <p className="text-blue-800">
+            Use it with your email <span className="font-semibold">{enrolled.email}</span> to access your course
+            on our learning platform. Note it down or take a screenshot of this page.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          onClick={startOver}
+          className="mt-6 w-full py-3 text-sm font-semibold text-slate-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 transition-colors"
+        >
+          Enroll in another course
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="bg-white p-8 rounded-2xl shadow-xl border border-slate-100">

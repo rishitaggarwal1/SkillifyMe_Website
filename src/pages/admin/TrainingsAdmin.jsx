@@ -73,6 +73,16 @@ export default function TrainingsAdmin() {
     },
     { header: 'Title', accessor: 'title' },
     {
+      header: 'Code',
+      value: (row) => row.code,
+      render: (row) =>
+        row.code ? (
+          <span className="font-mono font-semibold text-slate-700">{row.code}</span>
+        ) : (
+          <span className="text-amber-600 text-xs font-medium">Not set</span>
+        ),
+    },
+    {
       header: 'Category',
       value: (row) => row.category,
       render: (row) => (

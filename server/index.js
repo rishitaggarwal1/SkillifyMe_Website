@@ -7,6 +7,7 @@ const path = require('path');
 const crypto = require('crypto');
 const fs = require('fs');
 const db = require('./db');
+const { mailConfigured, sendMail, buildCourseReceipt } = require('./mailer');
 require('dotenv').config();
 
 if (!process.env.JWT_SECRET) {
@@ -161,6 +162,106 @@ const handleUpload = (uploader, folder) => (req, res) => {
 app.post('/api/upload/resumes', handleUpload(resumeUpload, 'resumes'));
 app.post('/api/upload/gallery', authenticateToken, handleUpload(imageUpload, 'gallery'));
 
+// --- ROLL NUMBERS (course enrollments) ---
+// Format: 2-digit year + course code + 6-digit counter, e.g. 26DEV000001.
+// There is one counter per year and course code, so each course starts at 000001 every year.
+const rollYear = () => new Intl.DateTimeFormat('en-IN', { timeZone: 'Asia/Kolkata', year: '2-digit' }).format(new Date());
+const codeFromTitle = (title) => (String(title || '').toUpperCase().replace(/[^A-Z0-9]/g, '') + 'XXX').slice(0, 3);
+
+// Gives an enrolled course application its roll number (once); returns it, or null for internships
+async function assignRollNumber(applicationId) {
+  const appRes = await db.query(
+    `SELECT a.roll_number, a.course_id, c.code, c.title
+     FROM applications a LEFT JOIN courses c ON c.id = a.course_id
+     WHERE a.id = $1`,
+    [applicationId]
+  );
+  const application = appRes.rows[0];
+  if (!application || !application.course_id) return null;
+  if (application.roll_number) return application.roll_number;
+
+  const prefix = rollYear() + (application.code || codeFromTitle(application.title));
+  const counterRes = await db.query(
+    `INSERT INTO roll_counters (prefix, last_value) VALUES ($1, 1)
+     ON CONFLICT (prefix) DO UPDATE SET last_value = roll_counters.last_value + 1
+     RETURNING last_value`,
+    [prefix]
+  );
+  const rollNumber = prefix + String(counterRes.rows[0].last_value).padStart(6, '0');
+
+  // Only set it if no other request got there first
+  const updated = await db.query(
+    `UPDATE applications SET roll_number = $1 WHERE id = $2 AND roll_number IS NULL RETURNING roll_number`,
+    [rollNumber, applicationId]
+  );
+  if (updated.rows[0]) return rollNumber;
+  const current = await db.query('SELECT roll_number FROM applications WHERE id = $1', [applicationId]);
+  return current.rows[0]?.roll_number || null;
+}
+
+// Emails the student a receipt (course + amount paid) once per course enrollment.
+// Runs in the background: a mail problem never affects the checkout response.
+async function sendCourseReceipt(applicationId) {
+  if (!mailConfigured()) {
+    console.warn('Receipt not emailed: SMTP is not configured in server/.env');
+    return;
+  }
+  // Claim the receipt first so it is sent only once, even if the payment is verified twice
+  const claim = await db.query(
+    `UPDATE applications SET receipt_sent_at = now()
+     WHERE id = $1 AND course_id IS NOT NULL AND receipt_sent_at IS NULL RETURNING id`,
+    [applicationId]
+  );
+  if (!claim.rows[0]) return;
+
+  try {
+    const result = await db.query(
+      `SELECT s.name, s.email, c.title,
+              COALESCE((SELECT p.amount FROM payments p
+                        WHERE p.application_id = a.id AND p.status = 'paid'
+                        ORDER BY p.created_at DESC LIMIT 1), 0) AS amount
+       FROM applications a
+       JOIN students s ON s.id = a.student_id
+       JOIN courses c ON c.id = a.course_id
+       WHERE a.id = $1`,
+      [applicationId]
+    );
+    const row = result.rows[0];
+    if (!row) return;
+    await sendMail({ to: row.email, ...buildCourseReceipt({ name: row.name, courseTitle: row.title, amount: row.amount }) });
+  } catch (error) {
+    // Release the claim so a later attempt can send it
+    await db.query('UPDATE applications SET receipt_sent_at = NULL WHERE id = $1', [applicationId]).catch(() => {});
+    console.error(`Receipt email failed for application ${applicationId}:`, error.message);
+  }
+}
+
+const sendReceiptInBackground = (applicationId) => {
+  sendCourseReceipt(applicationId).catch((error) => console.error('Receipt email failed:', error.message));
+};
+
+// Course codes are 3 capital letters / digits; a blank code is stored as NULL
+function normaliseCourseCode(item) {
+  if (!('code' in item)) return;
+  const code = String(item.code || '').trim().toUpperCase();
+  if (!code) {
+    item.code = null;
+    return;
+  }
+  if (!/^[A-Z0-9]{3}$/.test(code)) {
+    throw Object.assign(new Error('Course code must be exactly 3 letters or digits, e.g. DEV'), { status: 400 });
+  }
+  item.code = code;
+}
+
+// Friendlier messages for unique-constraint errors
+function describeDbError(error) {
+  if (error.code === '23505' && error.constraint === 'courses_code_key') {
+    return Object.assign(new Error('That course code is already used by another course'), { status: 409 });
+  }
+  return error;
+}
+
 // --- CHECKOUT (students buying a course or internship) ---
 const razorpayConfigured = () => process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET;
 
@@ -200,7 +301,9 @@ app.post('/api/checkout/start', async (req, res) => {
 
     if (price <= 0) {
       await db.query(`UPDATE applications SET status = 'enrolled', payment_status = 'paid' WHERE id = $1`, [applicationId]);
-      return res.json({ data: { free: true, application_id: applicationId }, error: null });
+      const rollNumber = await assignRollNumber(applicationId);
+      sendReceiptInBackground(applicationId);
+      return res.json({ data: { free: true, application_id: applicationId, roll_number: rollNumber }, error: null });
     }
 
     if (!razorpayConfigured()) return sendError(res, 503, 'Online payments are not set up yet. Please contact us.');
@@ -260,7 +363,9 @@ app.post('/api/checkout/verify', async (req, res) => {
     const payment = paymentRes.rows[0];
     if (!payment) return sendError(res, 404, 'Order not found');
     await db.query(`UPDATE applications SET status = 'enrolled', payment_status = 'paid' WHERE id = $1`, [payment.application_id]);
-    res.json({ data: { success: true }, error: null });
+    const rollNumber = await assignRollNumber(payment.application_id);
+    sendReceiptInBackground(payment.application_id);
+    res.json({ data: { success: true, roll_number: rollNumber }, error: null });
   } catch (error) {
     console.error('Checkout verify failed:', error);
     sendError(res, 500, 'Payment received but could not be recorded. Please contact support.');
@@ -389,6 +494,7 @@ app.post('/api/:table', validateTable, async (req, res) => {
   if (items.length === 0) return res.json({ data: [], error: null });
 
   try {
+    if (table === 'courses') items.forEach(normaliseCourseCode);
     const keys = Object.keys(items[0]).filter(k => k !== 'id');
     const columns = await assertColumns(table, keys);
 
@@ -399,7 +505,8 @@ app.post('/api/:table', validateTable, async (req, res) => {
     const result = await db.query(query, values);
     res.json({ data: isArray ? result.rows : result.rows[0], error: null });
   } catch (error) {
-    sendError(res, error.status || 500, error.message);
+    const err = describeDbError(error);
+    sendError(res, err.status || 500, err.message);
   }
 });
 
@@ -407,16 +514,26 @@ app.put('/api/:table/:id', authenticateToken, validateTable, async (req, res) =>
   const { table, id } = req.params;
   try {
     // Relation objects added by GET are not real columns
-    const keys = Object.keys(req.body || {}).filter(k => !['id', 'student', 'internship', 'course'].includes(k));
+    const body = { ...(req.body || {}) };
+    if (table === 'courses') normaliseCourseCode(body);
+    const keys = Object.keys(body).filter(k => !['id', 'student', 'internship', 'course'].includes(k));
     if (keys.length === 0) return sendError(res, 400, 'Nothing to update');
     const columns = await assertColumns(table, keys);
 
-    const values = keys.map(k => toDbValue(req.body[k], columns.get(k)));
+    const values = keys.map(k => toDbValue(body[k], columns.get(k)));
     const setString = keys.map((k, i) => `"${k}" = $${i + 1}`).join(', ');
     const result = await db.query(`UPDATE ${table} SET ${setString} WHERE id = $${keys.length + 1} RETURNING *`, [...values, id]);
+
+    // An admin enrolling a course application (e.g. after an offline payment) also issues a roll number
+    if (table === 'applications') {
+      for (const row of result.rows) {
+        if (row.status === 'enrolled') row.roll_number = await assignRollNumber(row.id);
+      }
+    }
     res.json({ data: result.rows, error: null });
   } catch (error) {
-    sendError(res, error.status || 500, error.message);
+    const err = describeDbError(error);
+    sendError(res, err.status || 500, err.message);
   }
 });
 
