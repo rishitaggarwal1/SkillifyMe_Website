@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useSearchParams } from 'react-router-dom';
 import { supabase } from '../lib/supabaseClient';
 import CourseCard from '../components/CourseCard';
 import Loader from '../components/Loader';
@@ -25,7 +26,11 @@ const Trainings = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [search, setSearch] = useState('');
-  const [activeCategory, setActiveCategory] = useState('All');
+  const [searchParams] = useSearchParams();
+  const categoryParam = searchParams.get('category');
+  const [activeCategory, setActiveCategory] = useState(
+    CATEGORIES.includes(categoryParam) ? categoryParam : 'All'
+  );
   const [sort, setSort] = useState('popular');
 
   useEffect(() => {
@@ -45,6 +50,11 @@ const Trainings = () => {
     };
     fetchCourses();
   }, []);
+
+  // Follow category links from the navbar (e.g. /trainings?category=Cloud)
+  useEffect(() => {
+    setActiveCategory(CATEGORIES.includes(categoryParam) ? categoryParam : 'All');
+  }, [categoryParam]);
 
   const filtered = useMemo(() => {
     let result = [...courses];

@@ -14,6 +14,8 @@ CREATE TABLE IF NOT EXISTS courses (
   students_count INTEGER DEFAULT 0,
   level TEXT DEFAULT 'Beginner',
   topics JSONB DEFAULT '[]'::jsonb,
+  -- [{ "title": "Module 1: Basics", "lessons": ["Lesson A", "Lesson B"] }, ...]
+  curriculum JSONB DEFAULT '[]'::jsonb,
   instructor TEXT DEFAULT 'SkillifyMe Team',
   is_bestseller BOOLEAN DEFAULT false,
   language TEXT DEFAULT 'English',
@@ -30,6 +32,7 @@ CREATE TABLE IF NOT EXISTS internships (
   original_price NUMERIC,
   features JSONB DEFAULT '[]'::jsonb,
   image_url TEXT,
+  problem_statement_url TEXT,
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
@@ -94,6 +97,7 @@ CREATE TABLE IF NOT EXISTS applications (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   student_id UUID REFERENCES students(id) ON DELETE CASCADE,
   internship_id UUID REFERENCES internships(id) ON DELETE CASCADE,
+  course_id UUID REFERENCES courses(id) ON DELETE SET NULL,
   status TEXT DEFAULT 'applied' CHECK (status IN ('applied', 'enrolled', 'rejected')),
   payment_status TEXT DEFAULT 'pending' CHECK (payment_status IN ('pending', 'paid')),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
@@ -104,8 +108,11 @@ CREATE TABLE IF NOT EXISTS payments (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   student_id UUID REFERENCES students(id) ON DELETE CASCADE,
   internship_id UUID REFERENCES internships(id) ON DELETE CASCADE,
+  course_id UUID REFERENCES courses(id) ON DELETE SET NULL,
+  application_id UUID REFERENCES applications(id) ON DELETE SET NULL,
   amount NUMERIC NOT NULL,
   payment_id TEXT,
+  order_id TEXT UNIQUE,
   status TEXT DEFAULT 'pending' CHECK (status IN ('pending', 'paid', 'failed')),
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
@@ -127,20 +134,44 @@ CREATE TABLE IF NOT EXISTS admin_users (
   created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- Insert Default Admin User (Password: Admin@123)
--- Hash generated using bcrypt for "Admin@123" with 10 rounds
-INSERT INTO admin_users (email, password_hash)
-VALUES ('admin@skillifyme.co.in', '$2b$10$myRAHrK4EZbPkbhUjCLHIOKt14EWFqUOewDg6siv3kzyIST5W3.8u')
-ON CONFLICT (email) DO NOTHING;
+-- Admin users are created with: node create-admin.js <email> <password>
+-- Remove the old default admin whose password was published in this file
+DELETE FROM admin_users
+WHERE email = 'admin@skillifyme.co.in'
+  AND password_hash = '$2b$10$myRAHrK4EZbPkbhUjCLHIOKt14EWFqUOewDg6siv3kzyIST5W3.8u';
+
+-- 11. Upgrades for databases created before course checkout existed
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS course_id UUID REFERENCES courses(id) ON DELETE SET NULL;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS course_id UUID REFERENCES courses(id) ON DELETE SET NULL;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS application_id UUID REFERENCES applications(id) ON DELETE SET NULL;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS order_id TEXT UNIQUE;
+ALTER TABLE internships ADD COLUMN IF NOT EXISTS problem_statement_url TEXT;
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS curriculum JSONB DEFAULT '[]'::jsonb;
+
+-- 12. Roll numbers for course enrollments, e.g. 26DEV000001 (year + course code + counter)
+-- Course code: 3 capital letters/digits, unique, used in the roll number
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS code TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS courses_code_key ON courses (code);
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS roll_number TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS applications_roll_number_key ON applications (roll_number);
+
+-- When the purchase receipt was emailed (NULL = not sent yet)
+ALTER TABLE applications ADD COLUMN IF NOT EXISTS receipt_sent_at TIMESTAMP WITH TIME ZONE;
+
+-- One counter per year + course code (e.g. '26DEV'), incremented atomically
+CREATE TABLE IF NOT EXISTS roll_counters (
+  prefix TEXT PRIMARY KEY,
+  last_value INTEGER NOT NULL DEFAULT 0
+);
 
 -- Seed contact_info
 INSERT INTO contact_info (email, phone, address, city, country, working_hours)
-VALUES ('contact@skillifyme.co.in', '', '', '', 'India', 'Mon–Sat, 9 AM – 7 PM IST')
-ON CONFLICT DO NOTHING;
+SELECT 'contact@skillifyme.co.in', '', '', '', 'India', 'Mon–Sat, 9 AM – 7 PM IST'
+WHERE NOT EXISTS (SELECT 1 FROM contact_info);
 
--- Seed courses
+-- Seed courses (only when the table is empty, so this file can be re-run safely)
 INSERT INTO courses (title, description, price, original_price, duration, image_url, category, rating, students_count, level, topics, instructor, is_bestseller, language)
-VALUES
+SELECT * FROM (VALUES
 (
   'Full Stack Web Development',
   'Master modern web development from frontend to backend. Build real-world projects using React, Node.js, MongoDB, and deploy to the cloud. Includes REST APIs, authentication, and CI/CD pipelines.',
@@ -188,10 +219,12 @@ VALUES
   'Vikram Nair',
   false,
   'English'
-);
+)) AS seed(title, description, price, original_price, duration, image_url, category, rating, students_count, level, topics, instructor, is_bestseller, language)
+WHERE NOT EXISTS (SELECT 1 FROM courses);
 
 -- Seed 4 text reviews + 1 video review for demo
-INSERT INTO reviews (type, reviewer_name, reviewer_role, reviewer_avatar, rating, review_text, is_featured) VALUES
+INSERT INTO reviews (type, reviewer_name, reviewer_role, reviewer_avatar, rating, review_text, is_featured)
+SELECT * FROM (VALUES
 (
   'text', 'Bhavya Chopra', 'Software Engineer at Infosys',
   '/assets/img/avatar/s1.jpg', 5,
@@ -215,4 +248,30 @@ INSERT INTO reviews (type, reviewer_name, reviewer_role, reviewer_avatar, rating
   '/assets/img/avatar/s3.jpg', 5,
   'The DSA bootcamp is brutal in the best way possible. I solved 200+ problems and finally understood dynamic programming. The mock interview sessions are worth every rupee.',
   true
-);
+)) AS seed(type, reviewer_name, reviewer_role, reviewer_avatar, rating, review_text, is_featured)
+WHERE NOT EXISTS (SELECT 1 FROM reviews);
+
+-- Give courses without a code one from the first three letters of their title,
+-- trying other letters / digits if that code is already taken
+DO $$
+DECLARE
+  c RECORD;
+  letters TEXT;
+  candidate TEXT;
+  i INTEGER;
+BEGIN
+  FOR c IN SELECT id, title FROM courses WHERE code IS NULL ORDER BY created_at LOOP
+    letters := upper(regexp_replace(c.title, '[^A-Za-z0-9]', '', 'g')) || 'XXX';
+    candidate := substr(letters, 1, 3);
+    i := 4;
+    WHILE EXISTS (SELECT 1 FROM courses WHERE code = candidate) LOOP
+      IF i <= length(letters) THEN
+        candidate := substr(letters, 1, 2) || substr(letters, i, 1);
+      ELSE
+        candidate := substr(letters, 1, 2) || ((i - length(letters)) % 10)::text;
+      END IF;
+      i := i + 1;
+    END LOOP;
+    UPDATE courses SET code = candidate WHERE id = c.id;
+  END LOOP;
+END $$;

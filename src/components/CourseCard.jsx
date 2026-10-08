@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { Link } from 'react-router-dom';
 import { Star, Clock, ChevronRight, Users } from 'lucide-react';
 
 const StarRating = ({ rating = 0 }) => {
@@ -140,10 +141,13 @@ const CourseCard = ({ course }) => {
               </span>
             )}
           </div>
-          <button className="flex items-center gap-1 px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 active:scale-95 transition-all shadow-sm shadow-blue-600/20 flex-shrink-0">
+          <Link
+            to={`/apply?course=${course.id}`}
+            className="flex items-center gap-1 px-4 py-2 text-sm font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 active:scale-95 transition-all shadow-sm shadow-blue-600/20 flex-shrink-0"
+          >
             Enroll
             <ChevronRight className="w-4 h-4" />
-          </button>
+          </Link>
         </div>
       </div>
     </motion.div>

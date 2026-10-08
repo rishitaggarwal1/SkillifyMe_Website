@@ -20,6 +20,8 @@ out/
 .env.production.local
 *.env
 *.env.*
+!.env.example
+!server/.env.example
 secrets.json
 *.pem
 *.key
@@ -58,3 +60,6 @@ pnpm-debug.log*
 # Debugging
 .vimspector.json
 .history/
+
+# Uploaded files (student resumes, images)
+server/uploads/

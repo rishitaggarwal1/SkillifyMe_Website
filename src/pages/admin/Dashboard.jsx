@@ -46,7 +46,7 @@ export default function Dashboard() {
   };
 
   const statCards = [
-    { name: 'Training Programs', value: stats.courses, icon: BookOpen, color: 'bg-blue-600' },
+    { name: 'Courses', value: stats.courses, icon: BookOpen, color: 'bg-blue-600' },
     { name: 'Total Internships', value: stats.internships, icon: Briefcase, color: 'bg-blue-500' },
     { name: 'Total Students', value: stats.students, icon: Users, color: 'bg-purple-500' },
     { name: 'Applications', value: stats.applications, icon: GraduationCap, color: 'bg-indigo-500' },

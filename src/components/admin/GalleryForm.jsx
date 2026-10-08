@@ -59,7 +59,7 @@ export default function GalleryForm({ initialData, onSubmit, onClose }) {
     try {
       let imageUrl = formData.image_url;
       if (imageFile) imageUrl = await uploadImage(imageFile);
-      onSubmit({ ...formData, image_url: imageUrl });
+      await onSubmit({ ...formData, image_url: imageUrl });
     } catch (err) {
       console.error('Upload error:', err);
       setUploadError('Image upload failed. Please try again.');

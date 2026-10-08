@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { supabase } from '../../lib/supabaseClient';
 import DataTable from '../../components/admin/DataTable';
+import { useToast } from '../../components/admin/Toast';
 import GalleryForm from '../../components/admin/GalleryForm';
 import { Plus, Edit2, Trash2 } from 'lucide-react';
 
 export default function GalleryAdmin() {
+  const toast = useToast();
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -20,7 +22,7 @@ export default function GalleryAdmin() {
       .from('gallery_items')
       .select('*')
       .order('created_at', { ascending: false });
-    if (error) console.error('Error fetching gallery items:', error);
+    if (error) toast.error(`Could not load data: ${error.message}`);
     else setItems(data);
     setLoading(false);
   };
@@ -28,21 +30,23 @@ export default function GalleryAdmin() {
   const handleDelete = async (id) => {
     if (!window.confirm('Delete this gallery item?')) return;
     const { error } = await supabase.from('gallery_items').delete().eq('id', id);
-    if (error) console.error('Error deleting:', error);
-    else fetchItems();
+    if (error) {
+      toast.error(`Could not delete: ${error.message}`);
+      return;
+    }
+    toast.success('Image deleted');
+    fetchItems();
   };
 
   const handleSave = async (formData) => {
-    if (currentItem) {
-      const { error } = await supabase
-        .from('gallery_items')
-        .update(formData)
-        .eq('id', currentItem.id);
-      if (error) console.error('Error updating:', error);
-    } else {
-      const { error } = await supabase.from('gallery_items').insert([formData]);
-      if (error) console.error('Error inserting:', error);
+    const { error } = currentItem
+      ? await supabase.from('gallery_items').update(formData).eq('id', currentItem.id)
+      : await supabase.from('gallery_items').insert([formData]);
+    if (error) {
+      toast.error(`Could not save: ${error.message}`);
+      return; // keep the form open so nothing typed is lost
     }
+    toast.success(currentItem ? 'Image updated' : 'Image added');
     setIsModalOpen(false);
     fetchItems();
   };
@@ -67,6 +71,7 @@ export default function GalleryAdmin() {
     { header: 'Title', accessor: 'title' },
     {
       header: 'Category',
+      value: (row) => row.category,
       render: (row) => (
         <span className="inline-block bg-blue-50 text-blue-700 text-xs font-semibold px-2.5 py-1 rounded-full">
           {row.category}
@@ -75,6 +80,7 @@ export default function GalleryAdmin() {
     },
     {
       header: 'Added On',
+      value: (row) => row.created_at?.slice(0, 10),
       render: (row) =>
         new Date(row.created_at).toLocaleDateString('en-IN', {
           day: 'numeric',
@@ -122,7 +128,13 @@ export default function GalleryAdmin() {
       {loading ? (
         <div className="text-center py-10 text-slate-500">Loading gallery items...</div>
       ) : (
-        <DataTable data={items} columns={columns} renderActions={renderActions} />
+        <DataTable
+          data={items}
+          columns={columns}
+          renderActions={renderActions}
+          exportFileName="gallery"
+          searchPlaceholder="Search gallery…"
+        />
       )}
 
       {isModalOpen && (

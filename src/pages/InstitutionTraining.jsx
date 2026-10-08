@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Link } from 'react-router-dom';
+import { supabase } from '../lib/supabaseClient';
 import { 
   Building2, GraduationCap, Users, BookOpen, Presentation, 
   Briefcase, Code, Database, Globe, Lock, Cpu, Server, 
@@ -340,14 +341,27 @@ const TestimonialCard = ({ quote, author, role }) => (
 );
 
 const CallbackForm = () => {
-  const [status, setStatus] = useState('idle'); // idle, submitting, success
+  const [status, setStatus] = useState('idle'); // idle, submitting, success, error
 
-  const handleSubmit = (e) => {
+  // Enquiries are saved as contact messages so they show up in Admin → Contacts
+  const handleSubmit = async (e) => {
     e.preventDefault();
     setStatus('submitting');
-    setTimeout(() => {
-      setStatus('success');
-    }, 1500);
+    const f = Object.fromEntries(new FormData(e.target));
+    const message = [
+      '[Institution enquiry]',
+      `Institution: ${f.institution}`,
+      `Designation: ${f.designation}`,
+      `Phone: ${f.phone}`,
+      `Number of students: ${f.students}`,
+      '',
+      f.details,
+    ].join('\n');
+
+    const { error } = await supabase
+      .from('contacts')
+      .insert([{ name: f.contact_person, email: f.email, message }]);
+    setStatus(error ? 'error' : 'success');
   };
 
   if (status === 'success') {
@@ -373,27 +387,27 @@ const CallbackForm = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">Institution Name</label>
-          <input required type="text" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600" />
+          <input required type="text" name="institution" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600" />
         </div>
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">Contact Person</label>
-          <input required type="text" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600" />
+          <input required type="text" name="contact_person" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600" />
         </div>
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">Designation</label>
-          <input required type="text" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600" />
+          <input required type="text" name="designation" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600" />
         </div>
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">Email</label>
-          <input required type="email" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600" />
+          <input required type="email" name="email" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600" />
         </div>
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">Phone Number</label>
-          <input required type="tel" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600" />
+          <input required type="tel" name="phone" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600" />
         </div>
         <div>
           <label className="block text-sm font-medium text-slate-700 mb-1">Number of Students</label>
-          <select required className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 bg-white">
+          <select required name="students" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600 bg-white">
             <option value="">Select...</option>
             <option value="1-50">1 - 50</option>
             <option value="51-200">51 - 200</option>
@@ -405,9 +419,13 @@ const CallbackForm = () => {
       
       <div>
         <label className="block text-sm font-medium text-slate-700 mb-1">Training Requirement Details</label>
-        <textarea required rows="3" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"></textarea>
+        <textarea required name="details" rows="3" className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-blue-600/20 focus:border-blue-600"></textarea>
       </div>
       
+      {status === 'error' && (
+        <p className="text-sm text-red-600">Something went wrong. Please try again or email us directly.</p>
+      )}
+
       <button 
         type="submit" 
         disabled={status === 'submitting'}
