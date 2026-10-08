@@ -98,14 +98,24 @@ const HeroSection = () => {
           <div className="relative w-full z-10">
             {/* Mobile Fallback image (simplified, less heavy animations) */}
             <div className="block sm:hidden w-full max-w-sm mx-auto relative rounded-[2rem] overflow-hidden shadow-2xl border-8 border-white mt-8">
-              <motion.img 
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
+              {/* Main image on phones: small .webp, loaded first, visible straight away (slides in without fading) */}
+              <motion.img
+                initial={{ y: 20 }}
+                animate={{ y: 0 }}
                 transition={{ duration: 0.8 }}
-                src="/assets/img/landing/online-courses/signup-img.jpg" 
-                alt="Student learning" 
+                src="/assets/img/landing/online-courses/signup-img.webp"
+                alt="Student learning"
+                width={900}
+                height={758}
+                fetchpriority="high"
+                decoding="async"
                 className="w-full h-auto object-cover"
-                onError={(e) => { e.target.src = 'https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=800&q=80' }}
+                onError={(e) => {
+                  const img = e.target;
+                  img.src = img.src.endsWith('.webp')
+                    ? '/assets/img/landing/online-courses/signup-img.jpg'
+                    : 'https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=800&q=80';
+                }}
               />
             </div>
             

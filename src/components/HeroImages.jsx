@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
 import { Code, Cpu, Sparkles, Layers } from 'lucide-react';
+import Img from './Img';
 
 const HeroImages = () => {
   // Mouse tracking for parallax
@@ -52,7 +53,7 @@ const HeroImages = () => {
           transition={{ duration: 5.5, repeat: Infinity, ease: "easeInOut", delay: 0.5 }}
           className="relative group h-full"
         >
-          <img
+          <Img
             src="https://images.unsplash.com/photo-1531482615713-2afd69097998?auto=format&fit=crop&w=600&q=80"
             alt="Collaborative Learning"
             className="w-full h-32 lg:h-40 object-cover rounded-[14px] transition-transform duration-500 group-hover:scale-110"
@@ -75,7 +76,8 @@ const HeroImages = () => {
           className="relative group bg-white"
         >
           <div className="absolute inset-0 bg-gradient-to-t from-slate-900/30 to-transparent z-10 pointer-events-none"></div>
-          <img
+          <Img
+            priority
             src="https://images.unsplash.com/photo-1522202176988-66273c2fd55f?auto=format&fit=crop&w=800&q=80"
             alt="Student coding on laptop"
             className="w-full h-[320px] lg:h-[420px] object-cover transition-transform duration-700 group-hover:scale-105"
@@ -96,7 +98,7 @@ const HeroImages = () => {
           transition={{ duration: 4.5, repeat: Infinity, ease: "easeInOut", delay: 1 }}
           className="relative group bg-slate-900"
         >
-          <img
+          <Img
             src="https://images.unsplash.com/photo-1555066931-4365d14bab8c?auto=format&fit=crop&w=600&q=80"
             alt="Code Editor Screen"
             className="w-full h-28 lg:h-36 object-cover rounded-[14px] transition-transform duration-500 group-hover:scale-110 opacity-90 group-hover:opacity-100"
@@ -117,7 +119,7 @@ const HeroImages = () => {
           transition={{ duration: 5, repeat: Infinity, ease: "easeInOut", delay: 1.5 }}
           className="relative group h-full w-full"
         >
-          <img
+          <Img
             src="https://images.unsplash.com/photo-1573164713988-8665fc963095?auto=format&fit=crop&w=500&q=80"
             alt="Career Growth Interview"
             className="w-full h-full object-cover rounded-full transition-transform duration-500 group-hover:scale-110"

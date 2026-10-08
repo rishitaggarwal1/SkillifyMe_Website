@@ -33,6 +33,19 @@ const readJson = async (response) => {
   }
 };
 
+// Public data (courses, reviews, ...) is kept for a minute in the browser, so moving between pages
+// doesn't download it again. Identical requests made at the same time share one download.
+// Logged-in admins always get fresh data, and any change clears the cached table.
+const PUBLIC_TABLES = new Set(['courses', 'internships', 'reviews', 'contact_info', 'gallery_items']);
+const BROWSER_CACHE_MS = 60 * 1000;
+const responseCache = new Map(); // url -> { promise, expires }
+
+const clearBrowserCache = (table) => {
+  for (const key of responseCache.keys()) {
+    if (key.startsWith(`${API_URL}/${table}?`) || key === `${API_URL}/${table}`) responseCache.delete(key);
+  }
+};
+
 // Uploaded file URLs, so getPublicUrl(path) can return the URL the server actually saved
 const uploadedUrls = new Map();
 
@@ -48,6 +61,7 @@ class QueryBuilder {
     this._limit = null;
     this._single = false;
     this._count = null;
+    this._head = false;
     this._order = [];
   }
 
@@ -56,6 +70,7 @@ class QueryBuilder {
     if (this._data === null && this._method !== 'DELETE') this._method = 'GET';
     this._select = columns;
     if (options.count) this._count = options.count;
+    if (options.head) this._head = true;
     return this;
   }
 
@@ -113,6 +128,7 @@ class QueryBuilder {
     if (this._method === 'GET') {
       const params = new URLSearchParams();
       if (this._count) params.append('count', this._count);
+      if (this._head) params.append('head', 'true');
       if (this._limit) params.append('limit', this._limit);
       this._order.forEach(order => params.append('order', order));
       this._eq.forEach(filter => params.append(filter.column, filter.value));
@@ -132,21 +148,44 @@ class QueryBuilder {
       }
     }
 
-    try {
-      const response = await fetch(url, options);
-      let json = await readJson(response);
+    const cacheable = this._method === 'GET' && PUBLIC_TABLES.has(this.table) && !readSession();
+    if (this._method !== 'GET') clearBrowserCache(this.table);
 
+    const load = async () => {
+      const response = await fetch(url, options);
+      const json = await readJson(response);
       if (response.status === 401) localStorage.removeItem(SESSION_KEY);
-      if (!response.ok) {
+      return { ok: response.ok, json };
+    };
+
+    try {
+      let request;
+      if (cacheable) {
+        const hit = responseCache.get(url);
+        if (hit && hit.expires > Date.now()) {
+          request = hit.promise;
+        } else {
+          request = load();
+          responseCache.set(url, { promise: request, expires: Date.now() + BROWSER_CACHE_MS });
+        }
+      } else {
+        request = load();
+      }
+
+      const { ok, json } = await request;
+      if (!ok) {
+        if (cacheable) responseCache.delete(url); // don't keep errors
         return { data: null, error: json.error || { message: 'Network error' }, count: null };
       }
 
-      if (this._single && Array.isArray(json.data)) {
-        json.data = json.data[0] || null;
+      let data = json.data;
+      if (this._single && Array.isArray(data)) {
+        data = data[0] || null;
       }
 
-      return { data: json.data, error: null, count: json.count };
+      return { data, error: null, count: json.count };
     } catch (error) {
+      if (cacheable) responseCache.delete(url);
       return { data: null, error: { message: error.message }, count: null };
     }
   }

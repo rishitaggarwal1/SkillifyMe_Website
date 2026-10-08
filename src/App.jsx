@@ -1,43 +1,80 @@
+import { lazy, Suspense, useEffect } from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import Navbar from './components/Navbar';
 import Footer from './components/Footer';
+import Loader from './components/Loader';
 import Home from './pages/Home';
-import Trainings from './pages/Trainings';
-import Internship from './pages/Internship';
-import Contact from './pages/Contact';
-import Apply from './pages/Apply';
-import Gallery from './pages/Gallery';
-import InstitutionTraining from './pages/InstitutionTraining';
 
-// Admin imports
-import AdminLayout from './components/admin/AdminLayout';
-import ProtectedRoute from './components/admin/ProtectedRoute';
-import AdminLogin from './pages/admin/AdminLogin';
-import Dashboard from './pages/admin/Dashboard';
-import InternshipsAdmin from './pages/admin/Internships';
-import ApplicationsAdmin from './pages/admin/Applications';
-import StudentsAdmin from './pages/admin/Students';
-import PaymentsAdmin from './pages/admin/Payments';
-import GalleryAdmin from './pages/admin/GalleryAdmin';
-import TrainingsAdmin from './pages/admin/TrainingsAdmin';
-import ContactsAdmin from './pages/admin/ContactsAdmin';
-import ReviewsAdmin from './pages/admin/ReviewsAdmin';
-import Reviews from './pages/Reviews';
-import ValidateCertificate from './pages/ValidateCertificate';
+// Every other page is loaded only when visited, so the first visit downloads less code.
+// The admin panel is never downloaded by website visitors.
+const publicPages = {
+  Trainings: () => import('./pages/Trainings'),
+  Internship: () => import('./pages/Internship'),
+  Contact: () => import('./pages/Contact'),
+  Apply: () => import('./pages/Apply'),
+  Gallery: () => import('./pages/Gallery'),
+  InstitutionTraining: () => import('./pages/InstitutionTraining'),
+  Reviews: () => import('./pages/Reviews'),
+  ValidateCertificate: () => import('./pages/ValidateCertificate'),
+};
+const Trainings = lazy(publicPages.Trainings);
+const Internship = lazy(publicPages.Internship);
+const Contact = lazy(publicPages.Contact);
+const Apply = lazy(publicPages.Apply);
+const Gallery = lazy(publicPages.Gallery);
+const InstitutionTraining = lazy(publicPages.InstitutionTraining);
+const Reviews = lazy(publicPages.Reviews);
+const ValidateCertificate = lazy(publicPages.ValidateCertificate);
+
+// Admin
+const AdminLayout = lazy(() => import('./components/admin/AdminLayout'));
+const ProtectedRoute = lazy(() => import('./components/admin/ProtectedRoute'));
+const AdminLogin = lazy(() => import('./pages/admin/AdminLogin'));
+const Dashboard = lazy(() => import('./pages/admin/Dashboard'));
+const InternshipsAdmin = lazy(() => import('./pages/admin/Internships'));
+const ApplicationsAdmin = lazy(() => import('./pages/admin/Applications'));
+const StudentsAdmin = lazy(() => import('./pages/admin/Students'));
+const PaymentsAdmin = lazy(() => import('./pages/admin/Payments'));
+const GalleryAdmin = lazy(() => import('./pages/admin/GalleryAdmin'));
+const TrainingsAdmin = lazy(() => import('./pages/admin/TrainingsAdmin'));
+const ContactsAdmin = lazy(() => import('./pages/admin/ContactsAdmin'));
+const ReviewsAdmin = lazy(() => import('./pages/admin/ReviewsAdmin'));
+
+// Fills the screen while a page's code loads, so the footer doesn't jump when the page appears
+const PageLoader = () => (
+  <div className="min-h-screen">
+    <Loader />
+  </div>
+);
 
 function App() {
+  // Once the current page has loaded, quietly fetch the other public pages' code
+  // so moving between pages is instant
+  useEffect(() => {
+    if (window.location.pathname.startsWith('/admin')) return;
+    const prefetch = () => Object.values(publicPages).forEach((load) => load().catch(() => {}));
+    if ('requestIdleCallback' in window) {
+      const id = window.requestIdleCallback(prefetch, { timeout: 4000 });
+      return () => window.cancelIdleCallback(id);
+    }
+    const t = setTimeout(prefetch, 2500);
+    return () => clearTimeout(t);
+  }, []);
+
   return (
     <Router>
       <Routes>
         {/* Admin Routes */}
-        <Route path="/admin/login" element={<AdminLogin />} />
-        
+        <Route path="/admin/login" element={<Suspense fallback={<PageLoader />}><AdminLogin /></Suspense>} />
+
         <Route
           path="/admin"
           element={
-            <ProtectedRoute>
-              <AdminLayout />
-            </ProtectedRoute>
+            <Suspense fallback={<PageLoader />}>
+              <ProtectedRoute>
+                <AdminLayout />
+              </ProtectedRoute>
+            </Suspense>
           }
         >
           <Route index element={<Dashboard />} />
@@ -58,18 +95,20 @@ function App() {
             <div className="flex flex-col min-h-screen bg-slate-50 font-sans text-slate-900">
               <Navbar />
               <main className="flex-grow pt-[80px]">
-                <Routes>
-                  <Route path="/" element={<Home />} />
-                  <Route path="/trainings" element={<Trainings />} />
-                  <Route path="/institution-training" element={<InstitutionTraining />} />
-                  <Route path="/internship" element={<Internship />} />
-                  <Route path="/contact" element={<Contact />} />
-                  <Route path="/apply" element={<Apply />} />
-                  <Route path="/gallery" element={<Gallery />} />
-                  <Route path="/reviews" element={<Reviews />} />
-                  <Route path="/validate-certificate" element={<ValidateCertificate />} />
-                  <Route path="/validate-certificate/:certId" element={<ValidateCertificate />} />
-                </Routes>
+                <Suspense fallback={<PageLoader />}>
+                  <Routes>
+                    <Route path="/" element={<Home />} />
+                    <Route path="/trainings" element={<Trainings />} />
+                    <Route path="/institution-training" element={<InstitutionTraining />} />
+                    <Route path="/internship" element={<Internship />} />
+                    <Route path="/contact" element={<Contact />} />
+                    <Route path="/apply" element={<Apply />} />
+                    <Route path="/gallery" element={<Gallery />} />
+                    <Route path="/reviews" element={<Reviews />} />
+                    <Route path="/validate-certificate" element={<ValidateCertificate />} />
+                    <Route path="/validate-certificate/:certId" element={<ValidateCertificate />} />
+                  </Routes>
+                </Suspense>
               </main>
               <Footer />
             </div>

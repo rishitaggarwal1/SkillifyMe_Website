@@ -276,6 +276,12 @@ BEGIN
   END LOOP;
 END $$;
 
+-- Indexes for looking up a student's enrollments and payments quickly
+CREATE INDEX IF NOT EXISTS applications_student_id_idx ON applications (student_id);
+CREATE INDEX IF NOT EXISTS applications_course_id_idx ON applications (course_id);
+CREATE INDEX IF NOT EXISTS payments_student_id_idx ON payments (student_id);
+CREATE INDEX IF NOT EXISTS payments_application_id_idx ON payments (application_id);
+
 -- 13. What the public certificate page (/validate-certificate/<roll number>) shows.
 -- Every column here is shown on the page, in this order, with a label made from the column name
 -- (institution_name -> "Institution Name"). To show another field, add a column here;

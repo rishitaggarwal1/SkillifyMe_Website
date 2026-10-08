@@ -1,6 +1,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { Twitter, Linkedin, Instagram, Youtube, Mail, MapPin } from 'lucide-react';
+import Img from './Img';
 
 const Footer = () => {
   return (
@@ -11,7 +12,7 @@ const Footer = () => {
           <div className="lg:col-span-1">
             <Link to="/" className="flex items-center gap-2 mb-6 group">
               <div className="bg-white p-3 rounded-lg">
-                <img 
+                <Img 
                   src="/assets/img/logo.png" 
                   alt="SkillifyMe" 
                   className="h-11 object-contain transition-transform duration-300 group-hover:scale-[1.03]" 

@@ -1,5 +1,6 @@
 const express = require('express');
 const cors = require('cors');
+const compression = require('compression');
 const jwt = require('jsonwebtoken');
 const bcrypt = require('bcrypt');
 const multer = require('multer');
@@ -23,6 +24,7 @@ if (process.env.TRUST_PROXY) app.set('trust proxy', 1);
 // CORS_ORIGIN can be a comma-separated list (e.g. https://skillifyme.co.in). Defaults to allowing all.
 const corsOrigin = process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',').map(o => o.trim()) : true;
 app.use(cors({ origin: corsOrigin }));
+app.use(compression()); // gzip responses: much less data for phones
 app.use(express.json({ limit: '1mb' }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads'), {
   setHeaders: (res) => res.setHeader('X-Content-Type-Options', 'nosniff'),
@@ -484,13 +486,37 @@ async function attachRelations(rows) {
   }));
 }
 
+// --- Short-lived cache for public data (courses, reviews, ...) ---
+// The database is far away, so most visitors are served from memory instead of waiting for it.
+// Any change made through this server clears that table's cache at once; PUBLIC_CACHE_SECONDS limits
+// how long a change made directly in the database (e.g. by the LMS) can take to show.
+const PUBLIC_CACHE_MS = Number(process.env.PUBLIC_CACHE_SECONDS ?? 60) * 1000;
+const publicCache = new Map(); // `${table}?${query}` -> { body, expires }
+
+const cacheKey = (table, query) =>
+  `${table}?${Object.keys(query).sort().map((k) => `${k}=${[].concat(query[k]).join(',')}`).join('&')}`;
+
+function clearPublicCache(table) {
+  if (!TABLES[table]?.publicRead) return;
+  for (const key of publicCache.keys()) {
+    if (key.startsWith(`${table}?`)) publicCache.delete(key);
+  }
+}
+
 app.get('/api/:table', validateTable, async (req, res) => {
   const { table } = req.params;
   if (!TABLES[table].publicRead && !readUser(req)) return sendError(res, 401, 'Not authorised');
 
+  const cacheable = TABLES[table].publicRead && PUBLIC_CACHE_MS > 0;
+  const key = cacheable ? cacheKey(table, req.query) : null;
+  if (cacheable) {
+    const hit = publicCache.get(key);
+    if (hit && hit.expires > Date.now()) return res.json(hit.body);
+  }
+
   try {
     const columns = await getColumns(table);
-    const filters = Object.entries(req.query).filter(([key]) => !['limit', 'order', 'count'].includes(key));
+    const filters = Object.entries(req.query).filter(([key]) => !['limit', 'order', 'count', 'head'].includes(key));
     await assertColumns(table, filters.map(([key]) => key));
 
     const values = filters.map(([, val]) => val);
@@ -511,16 +537,23 @@ app.get('/api/:table', validateTable, async (req, res) => {
     const limit = parseInt(req.query.limit);
     if (limit > 0) query += ` LIMIT ${Math.min(limit, 1000)}`;
 
-    const result = await db.query(query, values);
-    let rows = result.rows;
-    if (RELATIONS[table]) rows = await attachRelations(rows);
+    // head=true: only the number of rows is wanted (e.g. dashboard totals), so skip fetching them
+    const headOnly = req.query.head === 'true';
+    let rows = [];
+    if (!headOnly) {
+      const result = await db.query(query, values);
+      rows = result.rows;
+      if (RELATIONS[table]) rows = await attachRelations(rows);
+    }
 
     let count = null;
-    if (req.query.count === 'exact') {
+    if (req.query.count === 'exact' || headOnly) {
       const countRes = await db.query(`SELECT count(*) FROM ${table}${where}`, values);
       count = parseInt(countRes.rows[0].count);
     }
-    res.json({ data: rows, count, error: null });
+    const body = { data: rows, count, error: null };
+    if (cacheable) publicCache.set(key, { body, expires: Date.now() + PUBLIC_CACHE_MS });
+    res.json(body);
   } catch (error) {
     sendError(res, error.status || 500, error.message);
   }
@@ -544,6 +577,7 @@ app.post('/api/:table', validateTable, async (req, res) => {
     const query = `INSERT INTO ${table} (${keys.map(k => `"${k}"`).join(', ')}) VALUES ${placeholders} RETURNING *`;
 
     const result = await db.query(query, values);
+    clearPublicCache(table);
     res.json({ data: isArray ? result.rows : result.rows[0], error: null });
   } catch (error) {
     const err = describeDbError(error);
@@ -564,6 +598,7 @@ app.put('/api/:table/:id', authenticateToken, validateTable, async (req, res) =>
     const values = keys.map(k => toDbValue(body[k], columns.get(k)));
     const setString = keys.map((k, i) => `"${k}" = $${i + 1}`).join(', ');
     const result = await db.query(`UPDATE ${table} SET ${setString} WHERE id = $${keys.length + 1} RETURNING *`, [...values, id]);
+    clearPublicCache(table);
 
     // An admin enrolling a course application (e.g. after an offline payment) also issues a roll number
     if (table === 'applications') {
@@ -582,6 +617,7 @@ app.delete('/api/:table/:id', authenticateToken, validateTable, async (req, res)
   const { table, id } = req.params;
   try {
     const result = await db.query(`DELETE FROM ${table} WHERE id = $1 RETURNING *`, [id]);
+    clearPublicCache(table);
     res.json({ data: result.rows, error: null });
   } catch (error) {
     sendError(res, 500, error.message);
@@ -590,4 +626,12 @@ app.delete('/api/:table/:id', authenticateToken, validateTable, async (req, res)
 
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
+  // Open a database connection straight away so the first visitor doesn't wait for it
+  db.query('SELECT 1').catch((error) => console.error('Database not reachable:', error.message));
 });
+
+// Optional: KEEP_DB_WARM=1 pings the database every 4 minutes so Neon never goes to sleep
+// (avoids a slow first request after a quiet period, but uses more of Neon's free compute hours)
+if (process.env.KEEP_DB_WARM) {
+  setInterval(() => db.query('SELECT 1').catch(() => {}), 4 * 60 * 1000).unref();
+}

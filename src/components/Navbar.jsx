@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Menu, X, ChevronRight, ChevronDown, Cpu, Database, Code, Globe, Building2, Briefcase, GraduationCap, Presentation, ArrowRight } from 'lucide-react';
+import Img from './Img';
 
 const Navbar = () => {
   const [isScrolled, setIsScrolled] = useState(false);
@@ -76,7 +77,8 @@ const Navbar = () => {
             {/* Logo */}
             <Link to="/" className="flex items-center gap-2 z-50 group h-full py-1">
               <div className="relative flex items-center h-full">
-                <img
+                <Img
+                  priority
                   src="/assets/img/logo.png"
                   alt="SkillifyMe"
                   className="h-[90%] w-auto object-contain transition-transform duration-300 group-hover:scale-[1.03]"
