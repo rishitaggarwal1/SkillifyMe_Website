@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { Clock, CheckCircle2, ArrowRight } from 'lucide-react';
+import Img from './Img';
 
 const InternshipCard = ({ internship, index }) => {
   let featuresList = [];
@@ -32,7 +33,7 @@ const InternshipCard = ({ internship, index }) => {
       {/* Top Banner / Image Area */}
       <div className="relative h-48 overflow-hidden bg-slate-100">
         {internship.image_url ? (
-          <img 
+          <Img 
             src={internship.image_url} 
             alt={internship.title} 
             className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"

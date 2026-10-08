@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, ZoomIn, Image } from 'lucide-react';
+import Img from '../components/Img';
 
 const fadeInUp = {
   hidden: { opacity: 0, y: 30 },
@@ -215,7 +216,7 @@ const Gallery = () => {
                   onClick={() => setLightbox(item)}
                   className={`group relative rounded-2xl overflow-hidden cursor-pointer bg-slate-100 border border-slate-100 shadow-sm hover:shadow-xl hover:shadow-slate-200/50 transition-shadow duration-300 ${item.span}`}
                 >
-                  <img
+                  <Img
                     src={item.src}
                     alt={item.title}
                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
@@ -264,7 +265,7 @@ const Gallery = () => {
               className="relative max-w-3xl w-full rounded-3xl overflow-hidden shadow-2xl bg-slate-900"
               onClick={(e) => e.stopPropagation()}
             >
-              <img
+              <Img
                 src={lightbox.src}
                 alt={lightbox.title}
                 className="w-full max-h-[70vh] object-contain bg-slate-800"

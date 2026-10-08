@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import EcosystemSection from '../components/EcosystemSection';
 import HeroSection from '../components/HeroSection';
+import Img from '../components/Img';
 
 // --- Animations ---
 const fadeInUp = {
@@ -234,7 +235,7 @@ const Home = () => {
               >
                 <div className="relative h-56 overflow-hidden bg-slate-100">
                   <div className="absolute inset-0 bg-slate-900/10 group-hover:bg-transparent transition-colors z-10"></div>
-                  <img
+                  <Img
                     src={course.image}
                     alt={course.title}
                     className="w-full h-full object-cover transform group-hover:scale-110 transition-transform duration-700"
@@ -420,7 +421,7 @@ const Home = () => {
                   </div>
                   <p className="text-slate-700 text-lg mb-8 leading-relaxed italic">"{t.text}"</p>
                   <div className="flex items-center gap-4 mt-auto">
-                    <img
+                    <Img
                       src={t.avatar}
                       alt={t.name}
                       className="w-14 h-14 rounded-full object-cover border-2 border-slate-100"

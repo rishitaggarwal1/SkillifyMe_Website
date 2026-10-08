@@ -1,8 +1,9 @@
-import React, { useEffect, useState } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import Sidebar from './Sidebar';
 import Topbar from './Topbar';
 import { ToastProvider } from './Toast';
+import Loader from '../Loader';
 
 export default function AdminLayout() {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
@@ -18,7 +19,10 @@ export default function AdminLayout() {
         <div className="flex-1 flex flex-col min-w-0">
           <Topbar onMenuClick={() => setMobileNavOpen(true)} />
           <main className="flex-1 overflow-y-auto p-4 sm:p-6 bg-slate-50/50">
-            <Outlet />
+            {/* Admin pages load on demand; keep the sidebar visible meanwhile */}
+            <Suspense fallback={<Loader />}>
+              <Outlet />
+            </Suspense>
           </main>
         </div>
       </div>

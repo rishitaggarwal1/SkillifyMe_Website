@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { Link } from 'react-router-dom';
 import { Star, Clock, ChevronRight, Users } from 'lucide-react';
+import Img from './Img';
 
 const StarRating = ({ rating = 0 }) => {
   const full = Math.floor(rating);
@@ -37,7 +38,7 @@ const CourseCard = ({ course }) => {
       {/* Thumbnail */}
       <div className="relative h-48 overflow-hidden bg-slate-100 flex-shrink-0">
         {course.image_url ? (
-          <img
+          <Img
             src={course.image_url}
             alt={course.title}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"

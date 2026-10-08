@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { supabase } from '../lib/supabaseClient';
 import { Star, Quote, Play, X, MessageCircle, Video, Trophy } from 'lucide-react';
 import Loader from '../components/Loader';
+import Img from '../components/Img';
 
 // ── YouTube helpers ──────────────────────────────────────────
 const getYouTubeId = (url = '') => {
@@ -51,7 +52,7 @@ const TextCard = ({ review, idx }) => (
     </p>
     {review.rating > 0 && <StarRow rating={review.rating} />}
     <div className="flex items-center gap-3 pt-3 border-t border-slate-50">
-      <img
+      <Img
         src={review.reviewer_avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(review.reviewer_name)}&background=1d4ed8&color=fff`}
         alt={review.reviewer_name}
         className="w-11 h-11 rounded-full object-cover border-2 border-slate-100 shrink-0"
@@ -86,7 +87,7 @@ const VideoCard = ({ review, idx, onPlay }) => {
         onClick={() => onPlay(review)}
       >
         {thumb ? (
-          <img
+          <Img
             src={thumb}
             alt={review.video_title || review.reviewer_name}
             className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
@@ -121,7 +122,7 @@ const VideoCard = ({ review, idx, onPlay }) => {
         )}
         {review.rating > 0 && <StarRow rating={review.rating} />}
         <div className="flex items-center gap-2.5 mt-1">
-          <img
+          <Img
             src={review.reviewer_avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(review.reviewer_name)}&background=1d4ed8&color=fff`}
             alt={review.reviewer_name}
             className="w-8 h-8 rounded-full object-cover border border-slate-100 shrink-0"
@@ -361,7 +362,7 @@ export default function Reviews() {
               </div>
               <div className="p-4 flex items-center justify-between bg-slate-900">
                 <div className="flex items-center gap-3">
-                  <img
+                  <Img
                     src={videoModal.reviewer_avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(videoModal.reviewer_name)}&background=1d4ed8&color=fff`}
                     alt={videoModal.reviewer_name}
                     className="w-9 h-9 rounded-full object-cover border border-slate-700 shrink-0"

@@ -14,18 +14,29 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#2563eb">
 
-  <!-- Favicon and Touch Icons -->
-  <link rel="apple-touch-icon" sizes="180x180" href="/assets/img/shortLogo.png">
-  <link rel="icon" type="image/png" sizes="32x32" href="/assets/img/shortLogo.png">
-  <link rel="icon" type="image/png" sizes="16x16" href="/assets/img/shortLogo.png">
+  <!-- Connect early to servers the home page needs -->
+  <link rel="preconnect" href="https://images.unsplash.com">
 
-  <!-- Google tag (gtag.js) -->
-  <script async src="https://www.googletagmanager.com/gtag/js?id=G-MYZETFRKFV"></script>
+  <!-- Favicon and Touch Icons -->
+  <link rel="apple-touch-icon" sizes="180x180" href="/assets/img/apple-touch-icon.png">
+  <link rel="icon" type="image/png" sizes="32x32" href="/assets/img/favicon-32.png">
+  <link rel="icon" type="image/png" sizes="192x192" href="/assets/img/favicon-192.png">
+
+  <!-- Google tag (gtag.js): loaded after the page has finished loading, so it doesn't slow the page down.
+       Visits are still recorded; events queued before it loads are sent once it arrives. -->
   <script>
     window.dataLayer = window.dataLayer || [];
     function gtag() { dataLayer.push(arguments); }
     gtag('js', new Date());
     gtag('config', 'G-MYZETFRKFV');
+    window.addEventListener('load', function () {
+      setTimeout(function () {
+        var s = document.createElement('script');
+        s.async = true;
+        s.src = 'https://www.googletagmanager.com/gtag/js?id=G-MYZETFRKFV';
+        document.head.appendChild(s);
+      }, 1500);
+    });
   </script>
 </head>
 
