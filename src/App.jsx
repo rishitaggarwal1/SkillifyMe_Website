@@ -23,6 +23,7 @@ import TrainingsAdmin from './pages/admin/TrainingsAdmin';
 import ContactsAdmin from './pages/admin/ContactsAdmin';
 import ReviewsAdmin from './pages/admin/ReviewsAdmin';
 import Reviews from './pages/Reviews';
+import ValidateCertificate from './pages/ValidateCertificate';
 
 function App() {
   return (
@@ -66,6 +67,8 @@ function App() {
                   <Route path="/apply" element={<Apply />} />
                   <Route path="/gallery" element={<Gallery />} />
                   <Route path="/reviews" element={<Reviews />} />
+                  <Route path="/validate-certificate" element={<ValidateCertificate />} />
+                  <Route path="/validate-certificate/:certId" element={<ValidateCertificate />} />
                 </Routes>
               </main>
               <Footer />
