@@ -275,3 +275,24 @@ BEGIN
     UPDATE courses SET code = candidate WHERE id = c.id;
   END LOOP;
 END $$;
+
+-- 13. What the public certificate page (/validate-certificate/<roll number>) shows.
+-- Every column here is shown on the page, in this order, with a label made from the column name
+-- (institution_name -> "Institution Name"). To show another field, add a column here;
+-- no website code changes are needed. NEVER add private data such as email, phone or payments.
+-- Only paid, enrolled course students appear, so any other roll number is "not found".
+DROP VIEW IF EXISTS certificate_details;
+CREATE VIEW certificate_details AS
+SELECT
+  s.name       AS student_name,
+  c.title      AS course_title,
+  s.college    AS institution,
+  a.roll_number,
+  c.duration   AS course_duration,
+  a.created_at AS enrolled_on
+FROM applications a
+JOIN students s ON s.id = a.student_id
+JOIN courses c ON c.id = a.course_id
+WHERE a.roll_number IS NOT NULL
+  AND a.status = 'enrolled'
+  AND a.payment_status = 'paid';

@@ -17,6 +17,8 @@ if (!process.env.JWT_SECRET) {
 
 const app = express();
 const port = process.env.PORT || 3001;
+// Behind a hosting proxy (Render, Railway, ...) set TRUST_PROXY=1 so req.ip is the visitor's real address
+if (process.env.TRUST_PROXY) app.set('trust proxy', 1);
 
 // CORS_ORIGIN can be a comma-separated list (e.g. https://skillifyme.co.in). Defaults to allowing all.
 const corsOrigin = process.env.CORS_ORIGIN ? process.env.CORS_ORIGIN.split(',').map(o => o.trim()) : true;
@@ -384,6 +386,45 @@ app.post('/api/checkout/failed', async (req, res) => {
     res.json({ data: { success: true }, error: null });
   } catch (error) {
     sendError(res, 500, error.message);
+  }
+});
+
+// --- CERTIFICATE VERIFICATION (public, used by the QR code on printed certificates) ---
+// The LMS only gives out the QR once a course is completed, so a roll number that belongs
+// to a paid, enrolled course student means the certificate is genuine.
+// What is shown comes from the certificate_details view in schema.sql.
+const ROLL_NUMBER_PATTERN = /^\d{2}[A-Z0-9]{3}\d{6}$/;
+
+// Simple per-visitor limit so roll numbers can't be checked in bulk
+const verifyHits = new Map();
+const VERIFY_LIMIT = 30; // checks per visitor per minute
+const verifyRateLimit = (req, res, next) => {
+  const now = Date.now();
+  const key = req.ip;
+  const hits = (verifyHits.get(key) || []).filter((t) => now - t < 60_000);
+  if (hits.length >= VERIFY_LIMIT) {
+    return sendError(res, 429, 'Too many checks. Please wait a minute and try again.');
+  }
+  hits.push(now);
+  verifyHits.set(key, hits);
+  if (verifyHits.size > 10_000) verifyHits.clear(); // keep memory bounded
+  next();
+};
+
+app.get('/api/certificates/:rollNumber', verifyRateLimit, async (req, res) => {
+  const rollNumber = String(req.params.rollNumber || '').trim().toUpperCase();
+  if (!ROLL_NUMBER_PATTERN.test(rollNumber)) {
+    return res.json({ data: { valid: false, roll_number: rollNumber }, error: null });
+  }
+  try {
+    // The certificate_details view (schema.sql) decides which fields are public
+    const result = await db.query('SELECT * FROM certificate_details WHERE roll_number = $1', [rollNumber]);
+    const details = result.rows[0];
+    if (!details) return res.json({ data: { valid: false, roll_number: rollNumber }, error: null });
+    res.json({ data: { valid: true, roll_number: rollNumber, details }, error: null });
+  } catch (error) {
+    console.error('Certificate check failed:', error);
+    sendError(res, 500, 'Could not check this certificate right now. Please try again.');
   }
 });
 
