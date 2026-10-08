@@ -486,20 +486,85 @@ async function attachRelations(rows) {
   }));
 }
 
-// --- Short-lived cache for public data (courses, reviews, ...) ---
-// The database is far away, so most visitors are served from memory instead of waiting for it.
-// Any change made through this server clears that table's cache at once; PUBLIC_CACHE_SECONDS limits
-// how long a change made directly in the database (e.g. by the LMS) can take to show.
+// --- Cache for public data (courses, reviews, ...) ---
+// The database is far away (and Neon's free plan sleeps when idle), so visitors are served from memory:
+// - data younger than PUBLIC_CACHE_SECONDS is returned straight away
+// - older data is still returned straight away, and refreshed in the background for the next visitor
+//   (so nobody waits for the database), up to a day old
+// - any change made through this server clears that table's cache at once, so edits show immediately
 const PUBLIC_CACHE_MS = Number(process.env.PUBLIC_CACHE_SECONDS ?? 60) * 1000;
-const publicCache = new Map(); // `${table}?${query}` -> { body, expires }
+const MAX_STALE_MS = 24 * 60 * 60 * 1000;
+const publicCache = new Map(); // `${table}?${query}` -> { body, fetchedAt, refreshing, generation }
+const cacheGeneration = {}; // table -> number, bumped on every change so in-flight refreshes can't store old data
 
 const cacheKey = (table, query) =>
   `${table}?${Object.keys(query).sort().map((k) => `${k}=${[].concat(query[k]).join(',')}`).join('&')}`;
 
 function clearPublicCache(table) {
   if (!TABLES[table]?.publicRead) return;
+  cacheGeneration[table] = (cacheGeneration[table] || 0) + 1;
   for (const key of publicCache.keys()) {
     if (key.startsWith(`${table}?`)) publicCache.delete(key);
+  }
+}
+
+// Reads rows for GET /api/:table (filters, order, limit, count, head) and returns the response body
+async function loadTable(table, query) {
+  const columns = await getColumns(table);
+  const filters = Object.entries(query).filter(([key]) => !['limit', 'order', 'count', 'head'].includes(key));
+  await assertColumns(table, filters.map(([key]) => key));
+
+  const values = filters.map(([, val]) => val);
+  const where = filters.length > 0
+    ? ' WHERE ' + filters.map(([key], i) => `"${key}" = $${i + 1}`).join(' AND ')
+    : '';
+
+  let sql = `SELECT * FROM ${table}${where}`;
+
+  const orders = [].concat(query.order || []);
+  const orderSql = orders.map(o => {
+    const [col, dir] = String(o).split('.');
+    if (!columns.has(col)) throw Object.assign(new Error(`Unknown column "${col}"`), { status: 400 });
+    return `"${col}" ${dir === 'desc' ? 'DESC' : 'ASC'}`;
+  });
+  if (orderSql.length > 0) sql += ` ORDER BY ${orderSql.join(', ')}`;
+
+  const limit = parseInt(query.limit);
+  if (limit > 0) sql += ` LIMIT ${Math.min(limit, 1000)}`;
+
+  // head=true: only the number of rows is wanted (e.g. dashboard totals), so skip fetching them
+  const headOnly = query.head === 'true';
+  let rows = [];
+  if (!headOnly) {
+    const result = await db.query(sql, values);
+    rows = result.rows;
+    if (RELATIONS[table]) rows = await attachRelations(rows);
+  }
+
+  let count = null;
+  if (query.count === 'exact' || headOnly) {
+    const countRes = await db.query(`SELECT count(*) FROM ${table}${where}`, values);
+    count = parseInt(countRes.rows[0].count);
+  }
+  return { data: rows, count, error: null };
+}
+
+// Loads public data into the cache (used for background refreshes and warming up at start-up)
+async function refreshPublicCache(table, query) {
+  const key = cacheKey(table, query);
+  const generation = cacheGeneration[table] || 0;
+  const entry = publicCache.get(key);
+  if (entry) entry.refreshing = true;
+  try {
+    const body = await loadTable(table, query);
+    // Don't store it if the table was changed while we were reading
+    if ((cacheGeneration[table] || 0) === generation) {
+      publicCache.set(key, { body, fetchedAt: Date.now(), refreshing: false });
+    }
+    return body;
+  } finally {
+    const current = publicCache.get(key);
+    if (current) current.refreshing = false;
   }
 }
 
@@ -507,53 +572,21 @@ app.get('/api/:table', validateTable, async (req, res) => {
   const { table } = req.params;
   if (!TABLES[table].publicRead && !readUser(req)) return sendError(res, 401, 'Not authorised');
 
-  const cacheable = TABLES[table].publicRead && PUBLIC_CACHE_MS > 0;
-  const key = cacheable ? cacheKey(table, req.query) : null;
-  if (cacheable) {
-    const hit = publicCache.get(key);
-    if (hit && hit.expires > Date.now()) return res.json(hit.body);
-  }
-
   try {
-    const columns = await getColumns(table);
-    const filters = Object.entries(req.query).filter(([key]) => !['limit', 'order', 'count', 'head'].includes(key));
-    await assertColumns(table, filters.map(([key]) => key));
-
-    const values = filters.map(([, val]) => val);
-    const where = filters.length > 0
-      ? ' WHERE ' + filters.map(([key], i) => `"${key}" = $${i + 1}`).join(' AND ')
-      : '';
-
-    let query = `SELECT * FROM ${table}${where}`;
-
-    const orders = [].concat(req.query.order || []);
-    const orderSql = orders.map(o => {
-      const [col, dir] = String(o).split('.');
-      if (!columns.has(col)) throw Object.assign(new Error(`Unknown column "${col}"`), { status: 400 });
-      return `"${col}" ${dir === 'desc' ? 'DESC' : 'ASC'}`;
-    });
-    if (orderSql.length > 0) query += ` ORDER BY ${orderSql.join(', ')}`;
-
-    const limit = parseInt(req.query.limit);
-    if (limit > 0) query += ` LIMIT ${Math.min(limit, 1000)}`;
-
-    // head=true: only the number of rows is wanted (e.g. dashboard totals), so skip fetching them
-    const headOnly = req.query.head === 'true';
-    let rows = [];
-    if (!headOnly) {
-      const result = await db.query(query, values);
-      rows = result.rows;
-      if (RELATIONS[table]) rows = await attachRelations(rows);
+    if (TABLES[table].publicRead && PUBLIC_CACHE_MS > 0) {
+      const entry = publicCache.get(cacheKey(table, req.query));
+      const age = entry ? Date.now() - entry.fetchedAt : Infinity;
+      if (age < PUBLIC_CACHE_MS) return res.json(entry.body);
+      if (age < MAX_STALE_MS) {
+        // Answer immediately with the previous data; fetch fresh data for the next visitor
+        if (!entry.refreshing) {
+          refreshPublicCache(table, req.query).catch((error) => console.error(`Refreshing ${table} failed:`, error.message));
+        }
+        return res.json(entry.body);
+      }
+      return res.json(await refreshPublicCache(table, req.query));
     }
-
-    let count = null;
-    if (req.query.count === 'exact' || headOnly) {
-      const countRes = await db.query(`SELECT count(*) FROM ${table}${where}`, values);
-      count = parseInt(countRes.rows[0].count);
-    }
-    const body = { data: rows, count, error: null };
-    if (cacheable) publicCache.set(key, { body, expires: Date.now() + PUBLIC_CACHE_MS });
-    res.json(body);
+    res.json(await loadTable(table, req.query));
   } catch (error) {
     sendError(res, error.status || 500, error.message);
   }
@@ -624,10 +657,25 @@ app.delete('/api/:table/:id', authenticateToken, validateTable, async (req, res)
   }
 });
 
+// The requests the public pages make; loaded at start-up so even the first visitor gets them instantly
+const WARM_UP_QUERIES = [
+  ['courses', { order: 'created_at.desc' }],      // Trainings page, checkout
+  ['internships', {}],                            // checkout
+  ['internships', { order: 'id.asc' }],           // Internships page
+  ['reviews', { order: ['is_featured.desc', 'created_at.desc'] }], // Reviews page
+  ['contact_info', { limit: '1' }],               // Contact page
+];
+
 app.listen(port, () => {
   console.log(`Server running on port ${port}`);
-  // Open a database connection straight away so the first visitor doesn't wait for it
-  db.query('SELECT 1').catch((error) => console.error('Database not reachable:', error.message));
+  if (PUBLIC_CACHE_MS > 0) {
+    Promise.all(WARM_UP_QUERIES.map(([table, query]) => refreshPublicCache(table, query)))
+      .then(() => console.log('Public data loaded into memory'))
+      .catch((error) => console.error('Warm-up failed (data will load on first visit):', error.message));
+  } else {
+    // Open a database connection straight away so the first visitor doesn't wait for it
+    db.query('SELECT 1').catch((error) => console.error('Database not reachable:', error.message));
+  }
 });
 
 // Optional: KEEP_DB_WARM=1 pings the database every 4 minutes so Neon never goes to sleep
